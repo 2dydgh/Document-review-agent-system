@@ -1,0 +1,54 @@
+# DocSuree 배포 — `docker compose up -d` 하나로 뜬다.
+#
+# 사내 서버에서 바꿀 값은 아래 environment 의 주소 둘뿐이고, 그마저도 사내 기본값이
+# config/settings.toml 에 있어서 같은 LLM 서버를 쓰면 손댈 것이 없다.
+
+services:
+  docsuree:
+    image: docsuree:latest
+    build: .
+    container_name: docsuree
+    restart: unless-stopped
+
+    ports:
+      # **127.0.0.1 에 묶는다.** 이 앱에는 인증이 없다 — 0.0.0.0 으로 열면 사내망
+      # 아무나 남의 검토 이력과 보관된 원본 문서를 볼 수 있다. 다른 사람도 접속해야
+      # 하면 앞에 인증이 붙은 리버스 프록시를 두고, 이 줄은 그대로 둔다.
+      - "127.0.0.1:8000:8000"
+
+    environment:
+      # 사내 LLM 주소. config/settings.toml 에는 주소가 없으니 반드시 채운다.
+      # 다른 서버를 쓸 때만 채운다 — 설정 파일 사본을 만들지 말 것.
+      LLM_QWEN_URL: "${LLM_QWEN_URL:-}"
+      LLM_OCR_URL: "${LLM_OCR_URL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+
+      # Docling 을 어디서 돌릴지. 기본 auto — GPU 가 보이면 쓰고 없으면 CPU.
+      # 코드에 GPU 번호를 박지 않는다는 원칙에 따라 배치는 여기서만 정한다.
+      DOC_PARSER_DEVICE: "${DOC_PARSER_DEVICE:-auto}"
+
+      # 이미지에 미리 받아 둔 Docling 모델 자리. 폐쇄망에서 HuggingFace 를 찾지 않게 한다.
+      HF_HOME: /opt/hf
+      HF_HUB_OFFLINE: "1"
+
+    volumes:
+      # **이 하나만 챙기면 된다.** 검토 이력·최근 원본·업로드 기준이 전부 여기 있다.
+      # 컨테이너를 지우고 새로 만들어도 이 볼륨만 붙이면 그대로 이어진다.
+      - docsuree-data:/data
+
+      # 팀별 검토 기준. 이미지 안에도 씨앗이 들어 있지만, 기준은 사람이 손으로
+      # 고치는 물건이라 밖에 두고 읽기 전용으로 얹는다 — 고치고 컨테이너만 재시작.
+      - ./presets:/app/presets:ro
+
+    # 문서 1건 검사 최대 5분(루트 CLAUDE.md). 그보다 넉넉히 잡아 헬스체크가
+    # 검사 중인 서버를 죽이지 않게 한다.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  docsuree-data:

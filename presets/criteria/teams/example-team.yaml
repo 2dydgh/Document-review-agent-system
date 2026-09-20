@@ -1,0 +1,105 @@
+# 팀 기준 **예시**. 실제 운영에서 쓰는 팀 기준은 고객사 도메인 데이터라
+# 이 공개 저장소에 담지 않는다 — 대신 같은 스키마로 쓴 예시 하나를 둔다.
+#
+# 층은 파일 위치가 정한다(`modules/preset/library.py`):
+#   presets/criteria/common.yaml        공통 — 항상 걸린다
+#   presets/criteria/teams/<slug>.yaml  팀   — 로그인한 사용자의 소속 팀
+#   업로드 기준                          과제 — 검토를 시작할 때 고른다
+#
+# 기준 한 줄이 검사기를 고른다. `mode: 규칙` + `check: <이름>` 이면 그 이름의
+# 규칙 검사기가 LLM 없이 돈다. `mode: LLM-조각`·`LLM-문서` 는 모델에게 묻고,
+# `사람` 은 도구가 판정하지 않는다고 화면에 밝힌다.
+name: 예시팀
+team: 예시팀
+
+# 요건 ID 형식. 문서 2건 비교(추적성)가 이 값으로 돈다. 안 적으면 비교는
+# "검사 못 함"으로 남는다 — 지적 0건으로 보이게 두지 않는다.
+id_pattern: 'REQ-\d{3}'
+id_example: REQ-001
+
+# 산출물 종류. 업로드한 문서를 어느 종류로 볼지 자동 감지에 쓰고, 기준마다
+# `outputs:` 로 적용 대상을 좁힐 수 있다.
+outputs:
+- key: SRS
+  name: 요구사항명세서
+- key: SDD
+  name: 상세설계서
+
+items:
+- 'no': F-1
+  group: 형식
+  text: 필수 장절이 모두 있는지 확인한다
+  agent: 형식·완전성
+  mode: 규칙
+  check: completeness
+  params:
+    sections: [개요, 목적, 참조 문서, 기능 요구사항, 성능 요구사항]
+
+- 'no': F-2
+  group: 형식
+  text: 머릿말에 문서번호를 적는다
+  agent: 형식·완전성
+  mode: 규칙
+  check: header_footer
+  params:
+    where: header
+    pattern: '[A-Z]{2,}-[A-Z]{2,}-\d+'
+    message: 머릿말에 문서번호가 없습니다
+
+- 'no': F-3
+  group: 형식
+  text: 미결정 표시(TBD)가 남아 있지 않다
+  agent: 형식·완전성
+  mode: 규칙
+  check: placeholder
+
+- 'no': Q-1
+  group: 표현
+  text: 검증할 수 없는 모호한 표현을 쓰지 않는다
+  agent: 표현·내용 품질
+  mode: 규칙
+  check: text_pattern
+  params:
+    patterns: ['적절[한히]', '가능한 한', '등을 고려']
+    message: 판정 기준이 없는 표현입니다
+
+- 'no': Q-2
+  group: 표현
+  text: 약어는 용어 절에 등록한 뒤 쓴다
+  agent: 표현·내용 품질
+  mode: 규칙
+  check: abbrev
+  # 대문자로 쓴 도메인 명사가 미등록으로 섞인다. 팀이 쓰는 낱말을 여기 적어 뺀다.
+  params:
+    abbrev_ignore: [ANALOG, CABINET, DAMPER]
+
+- 'no': Q-3
+  group: 표현
+  text: 앞뒤가 어긋나는 서술이 없는지 본다
+  agent: 표현·내용 품질
+  mode: LLM-조각
+  # LLM 지적은 원문을 그대로 인용해야 하고, 그 인용을 코드가 문서와 대조한다.
+  # 통과한 근거가 없으면 지적을 버리고, 버린 건수를 INFO 로 드러낸다.
+
+- 'no': T-1
+  group: 추적성
+  text: 상위 문서의 요건이 하위 문서에 반영됐는지 본다
+  agent: 정합성·추적성
+  mode: 규칙
+  check: rtm_forward
+  outputs: [SDD]
+
+- 'no': T-2
+  group: 추적성
+  text: 하위 문서의 요건 참조가 상위 문서에 실재하는지 본다
+  agent: 정합성·추적성
+  mode: 규칙
+  check: rtm_reverse
+  outputs: [SDD]
+
+- 'no': H-1
+  group: 서식
+  text: 표는 가운데 정렬한다
+  agent: 형식·완전성
+  # 도구가 판정할 수 없는 것은 `사람` 으로 둔다. 검사한 척하지 않는다.
+  mode: 사람

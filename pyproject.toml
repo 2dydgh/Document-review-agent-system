@@ -1,0 +1,164 @@
+[project]
+name = "docsuree"
+version = "0.1.0"
+description = "문서 검증 AI 에이전트 플랫폼 (PoC)"
+requires-python = ">=3.11"
+# **DocSuree 를 쓰는 데 필요한 것은 전부 여기 있다.** 설치는 `uv sync` 한 줄이고,
+# 배포 서버든 개발 PC든 같은 한 줄이다 — 명령이 갈리면 "내 PC 에선 됐는데"가 생긴다.
+#
+# 예전에는 web·server extra 로 나눠 뒀는데, 앱은 고급 파서를 **설정 게이트 없이 항상**
+# 앞순위로 장착한다(app/parser_bridge.install_trkim_parser). 그래서 extra 를 빼고 깔면
+# 앱이 조용히 낮은 품질로 내려간다 — 표 구조를 못 읽고, 머리말·꼬리말이 본문에 섞여
+# 일관성 검사를 오염시킨다(실측: docling 없이 "99. 일반성적서 예시.pdf" 표 구조 0개).
+# 지적은 INFO 로 뜨지만, 설치 방법을 틀렸다는 신호를 지적 목록에서 읽어내라는 건
+# 사용자에게 떠넘기는 것이다. 고를 수 있게 두지 않는 편이 낫다.
+dependencies = [
+    "pypdf>=6.14.2",
+    "pdfplumber>=0.11.10",
+    "pyyaml>=6.0",
+    # 구형 .hwp(OLE 바이너리) 네이티브 파싱. Rust 파서의 PyO3 바인딩으로,
+    # .hwp를 .hwpx로 바꿔주면 그 다음은 hwpx.py가 처리한다(ingestion/hwp.py 참고).
+    # 주의: 0.8.1 linux 휠은 낡은 freetype을 번들해 import가 깨진다 — README 설치 절 참고.
+    "rhwp-python>=0.8.1",
+
+    # 웹 UI·API (`docsuree serve`). 문서 변환(docx/hwpx→PDF, POST /api/render-pdf)에는
+    # 시스템 LibreOffice(soffice)가 따로 필요하다 — 파이썬 의존성이 아니다. 없으면
+    # render-pdf 가 501 로 설치법을 안내하고 화면은 텍스트 미리보기로 폴백한다.
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    "fpdf2>=2.8.7",
+
+    # 포맷별 고급 파서. 상한을 반드시 건다 — 상한 없이 두었다가 python-hwpx 가
+    # 5.1.1 에서 5.8.0 으로 올라가 HWPX 각주 구조가 바뀐 걸 뒤늦게 발견한 이력이
+    # 있다(2026-08-06).
+    "pdf-inspector>=0.2.5,<0.3",
+    "pymupdf>=1.26,<2",
+    "python-docx>=1.1,<2",
+    "python-hwpx>=5.1.1,<6",
+    "olefile>=0.47,<1",
+
+    # 추적성 매트릭스 xlsx 내보내기(report 모듈). 팀이 보고서 부록 B 에 붙이는
+    # 산출물이라 CSV 로는 못 끝난다 — 셀 줄바꿈·열 너비·머리글 고정이 필요하다.
+    # 바닐라 JS 프론트에서는 xlsx 를 만들 수 없어 서버가 만든다.
+    "openpyxl>=3.1,<4",
+
+    # PDF 표 구조·머리말/꼬리말 복원. torch 를 끌고 와 설치가 수 GB 로 커지는 값을
+    # 치르지만, 이게 빠지면 위 주석의 품질 저하가 그대로 난다. 로컬 PaddleOCR 은
+    # 넣지 않는다 — 앱의 기본 OCR 경로는 LLM_OCR_URL 의 사내 VLM 이고,
+    # paddlepaddle CPU/GPU 선택은 배포 장비마다 다르다(아래 doc_parser_ocr extra).
+    #
+    # 주의: 첫 PDF 파싱 때 레이아웃·표 모델을 내려받는다. 사내망에서는 미리 받아
+    # 두어야 한다 — README "사내망 준비" 참고.
+    "docling>=2.115.0,<3",
+    "numpy>=2,<3",
+    "pillow>=11,<13",
+
+    # Docling 이 끌고 오는 것을 **직접 적는다.** 그래야 아래 [tool.uv.sources] 의
+    # CPU 인덱스 지정이 먹는다 — uv 의 source 는 프로젝트가 직접 적은 패키지에만
+    # 적용되고, 전이 의존성에는 안 걸린다. 버전은 docling 이 정하게 열어 둔다.
+    "torch",
+    "torchvision",
+]
+
+[project.optional-dependencies]
+# **DocSuree 를 쓰는 사람은 아래 extra 를 쓸 일이 없다** — 위 dependencies 에 다 있다.
+# 여기 남은 것은 `doc_parser` 모듈을 **다른 프로젝트로 떼어갈 때** 무엇을 깔아야 하는지
+# 적어 둔 목록이다(CLAUDE.md 모듈식 원칙: 폴더째 복사해도 동작해야 한다).
+#   uv sync --extra doc_parser_ocr        로컬 PaddleOCR 실험 — 운영 경로 아님
+# 백엔드는 호출 시점에 import 하므로 쓰는 포맷의 것만 깔면 된다.
+# HWPML(.hwp 중 평문 XML)은 표준 라이브러리만 쓰므로 추가 설치가 필요 없다.
+#
+# 버전은 위 dependencies 와 같이 움직여야 한다 — 갈리면 모듈을 떼어간 쪽만 다른
+# 버전을 받는다.
+doc_parser = [
+    "pdf-inspector>=0.2.5,<0.3",   # PDF 페이지 분류·마크다운 추출
+    "pymupdf>=1.26,<2",            # PDF 정규화 prestep·텍스트 엔진 폴백
+    "python-docx>=1.1,<2",         # DOCX
+    "python-hwpx>=5.1.1,<6",       # HWPX(OWPML)
+    "olefile>=0.47,<1",            # HWP5(OLE2)
+]
+# 로컬 GPU 실행용 — **레거시**. 기본 경로는 서버(llm_client 가 사내 vLLM 호출)다.
+# 주의: 아래는 PyPI 기본 인덱스라 CPU 빌드가 깔린다. CUDA 빌드(torch+cu126,
+# paddlepaddle-gpu)는 별도 인덱스가 필요하고 그 구성은 저장소에 없다 —
+# local(작업용)/gpu-legacy/pyproject.toml 에 실측 근거 주석과 함께 보존돼 있다.
+doc_parser_ocr = [
+    "paddleocr>=3.7.0,<3.8",       # 스캔 페이지·이미지 OCR
+    "paddlepaddle>=3.3,<4",        # paddleocr 의 연산 백엔드 — 없으면 import paddle 이
+                                   # 실패한다. GPU 는 paddlepaddle-gpu 인데 PyPI 에 없어
+                                   # 별도 인덱스가 필요하다(gpu-legacy 참조)
+    "docling>=2.115.0,<3",         # 표/그림/수식/코드 구조 복원
+    "numpy>=2,<3",
+    "pillow>=11,<13",
+]
+
+[tool.uv]
+# **torch 를 CPU 빌드로 고정한다.** PyPI 기본 wheel 은 CUDA 라이브러리를 함께 담아
+# 6GB 를 더 쓰는데, 지금 그 6GB 가 아무 일도 안 한다 — 실측(2026-08-25, L40S 서버):
+# torch 2.13 은 CUDA 13.0 을 요구하고 드라이버는 12.8 이라 `torch.cuda.is_available()`
+# 이 False 다. 게다가 GPU 4장 중 3장은 이미 vLLM(Qwen3.8-27B · Qwen3-VL)이 쓰고 있다.
+#
+# **검토 결과는 한 글자도 바뀌지 않는다.** Docling 은 CPU 에서도 같은 결과를 내고
+# (docling_adapter._get_converter 주석의 실측), 속도만 다르다. 배포 이미지가 절반으로
+# 줄어 폐쇄망 반입이 수월해지는 쪽을 택했다.
+#
+# GPU 를 살리려면 드라이버를 올리거나 torch 를 드라이버에 맞춰 낮춰야 하는데, 둘 다
+# LLM 서버를 건드리는 일이라 팀 합의가 먼저다. 그때 이 줄만 지우면 된다 —
+# 어느 장치에 올릴지는 이미 DOC_PARSER_DEVICE 가 정한다.
+# GPU 로 되돌리는 법: 아래 [[tool.uv.index]] 와 [tool.uv.sources] 두 블록을 지우고
+# `uv lock && uv sync` — 그러면 PyPI 기본(CUDA 포함) wheel 로 돌아간다.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true          # 여기 명시한 패키지만 이 인덱스에서 받는다
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[tool.pytest.ini_options]
+# 실문서(data/, 905쪽)를 읽는 테스트는 2~3분 걸린다. 기본으로는 돌린다 —
+# 이게 파싱을 실제로 검증하는 유일한 관문이라 빼두면 조용히 썩는다.
+# 빠른 루프에서는 `pytest -m "not slow"` 로 뺀다.
+#
+# 모듈식 이관: src/ 를 path에 올려 `modules.*`·`app.*` 를 import 가능하게 한다.
+# 테스트는 최상위 tests/(교차·실문서 통합) + src/modules/<name>/tests/(모듈 단위) 둘 다.
+pythonpath = ["src"]
+testpaths = ["src", "tests"]
+markers = [
+    "slow: 실문서를 읽어 오래 걸린다 (data/ 없으면 어차피 skip)",
+]
+
+[project.scripts]
+docsuree = "app.cli:main"
+
+[dependency-groups]
+# matplotlib 은 doc_parser 의 더미 테스트셋 생성기(generate_testset._formula_png)만 쓴다 —
+# 실문서 파싱에는 불필요해서 doc_parser extra 가 아니라 검증 도구 쪽에 둔다.
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.16.1",
+    "matplotlib>=3.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# 모듈식 구조: 조립(app) + 독립 모듈(modules).
+packages = ["src/app", "src/modules"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# HWPML 합성 픽스처가 삼중따옴표 문자열 안의 XML 이라, 줄을 접으면 그게 곧 테스트
+# 데이터 변경이 된다. 문자열 내부라 `# noqa` 도 못 붙인다(주석이 XML 내용이 돼버림).
+# 코드가 아니라 데이터라서 줄길이 규칙만 이 파일에서 뺀다 — 나머지 규칙은 그대로 적용.
+"src/modules/doc_parser/tests/test_hwpml_backend.py" = ["E501"]

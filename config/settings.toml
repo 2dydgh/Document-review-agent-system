@@ -1,0 +1,63 @@
+# 기본 설정. `docsuree review|compare|serve` 가 --settings 없이 이 파일을 읽는다.
+#
+# 주소·이름은 환경변수가 이 파일을 덮는다 — 서버는 옮겨다니고 배포마다 다르다.
+#   LLM_QWEN_URL     문서 검사용 (base_url)
+#   LLM_OCR_URL      그림 해석용 (vlm_base_url)
+#   LLM_QWEN_LABEL   화면 표시용 이름 (model_label)
+
+[llm]
+# echo    빈 응답. LLM 지적이 0건이 된다 — 지어내지 않는다
+# local   OpenAI 호환 /v1/chat/completions (vLLM · 사내 게이트웨이 · Ollama)
+#
+# 둘뿐이다. 외부 API(Anthropic 등) 어댑터는 첫 커밋부터 빈 스텁으로만 있다가
+# 지웠다(2026-09-09) — 사내 문서를 밖으로 보내는 것은 CLAUDE.md 가 금지한다.
+# 고를 수 없게 하는 것이 주석으로 말리는 것보다 확실하다.
+#
+# local 이 기본이다. echo 로 두면 결과가 조용히 룰 검사만 남는다
+# (실측: echo 6건 → Qwen 64건. 대가는 시간이다 — 0.17초 → 73.6초).
+# 빠르게만 보려면 화면에서 "규칙만"을 고른다.
+provider = "local"
+
+# 팀 LLM 서버. 창구가 둘이고, GPU 배치가 달라 따로 떠 있다.
+#   qwen  Qwen3.8-27B (L40S x2, tensor parallel)  — 문서 검사
+#   ocr   Qwen3-VL-8B-Instruct (L40S x1)          — 그림 해석
+#
+# **주소는 이 파일에 적지 않는다.** 배포마다 다르고, 저장소에 담을 것이 아니다.
+# 환경변수로 준다 — 저장소 루트의 `.env`(gitignore) 를 `source` 하면 된다:
+#
+#   export LLM_QWEN_URL=http://<서버>:9001/v1   # 문서 검사
+#   export LLM_OCR_URL=http://<서버>:9002/v1    # 그림 해석 (선택)
+base_url     = ""
+vlm_base_url = ""  # 비우면 그림 해석을 하지 않는다
+
+# 서버가 --served-model-name 으로 고정한 별칭. 전체 이름("Qwen/Qwen3.8-27B")을
+# 보내면 서버가 그런 모델을 모른다고 답한다.
+model     = "qwen"
+vlm_model = "ocr"
+model_label = "Qwen3.8-27B"  # 화면에 보여줄 이름. 서버 모델을 바꾸면 같이 고칠 것
+
+timeout     = 120
+thinking    = false  # 사고 ON 76.8초 → OFF 1.1초. 판정 정확도는 그대로였다
+max_tokens  = 1024
+concurrency = 4      # vLLM 은 배치 처리라 하나씩 보내면 GPU 가 논다.
+                     # **8 은 이 서버에서 항상 죽는다.** 실측(2026-08-26, 4천 자 청크):
+                     #   동시 1개 28s · 4개 29s · 8개 120s(7/8 타임아웃)
+                     # 4까지는 거의 공짜인데 8에서 절벽 — KV 캐시가 444블록뿐이라
+                     # (27B 가 GPU 2장을 거의 다 차지) 5개째부터 서로 밀어내며 재계산한다
+                     # (/metrics preemptions 254). "실측 8.7배"는 캐시가 넉넉하던 때 값.
+                     # **동시 검토자 수만큼 곱해진다** — 둘이 동시에 검토하면 8이 된다.
+                     # 서버가 KV 캐시를 늘리면(gpu_memory_utilization·max-model-len 조정)
+                     # 다시 재서 올릴 것.
+rescue_max  = 10     # 인용 대조 실패 후보를 버리기 전 재질의할 상한(검사기당).
+                     # 후보당 최대 2회 호출. 0 이면 끈다(즉시 폐기).
+
+# 사내 vLLM 게이트웨이로 되돌릴 때: LLM_QWEN_URL 을 그쪽으로,
+# model = "Qwen/Qwen3.6-27B", vlm_base_url = "" (그쪽은 VLM 이 따로 없다).
+
+[chunking]
+max_chars = 4000
+
+# 어시스턴트(A 안 2판). 서버에서 사용자마다 DoSuree 를 화면 없이 돌린다(app/chat.py).
+# 리눅스 빌드는 인터넷 되는 PC 에서 만들어 옮긴다(docs/superpowers/specs/2026-09-10-docsuree-chat-panel-design.md).
+[chat]
+dsr_bin = ""  # 비우면 어시스턴트가 꺼진다. DoSuree 실행 파일 경로를 준다
