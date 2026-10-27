@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="web/public/login_hero.png" alt="DocSuree investigator mascot" width="220">
+<img src="docs/manual/DocSuree-소개영상.gif" width="100%" alt="DocSuree 소개 영상 — 문서 업로드, 규칙과 사내 LLM 검토, 지적마다 원문 인용 대조, 근거 없는 지적 제외, DoSuree 대화" />
+
+<sub>화면 속 문서 · 이름은 가상의 샘플입니다 · <a href="docs/manual/film/">영상 원본</a></sub>
 
 # DocSuree
 

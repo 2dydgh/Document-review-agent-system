@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>DocSuree — 소개 영상</title>
+<style>
+@font-face { font-family: Wanted; src: url(../../../web/public/fonts/WantedSansVariable.woff2) format("woff2"); font-weight: 400 950; }
+html, body { margin: 0; background: #111; overflow: hidden; }
+#stage { display: block; width: 1920px; height: 1080px; font-family: Wanted, sans-serif; }
+#ui { position: fixed; left: 16px; bottom: 16px; right: 16px; display: flex; gap: 12px; align-items: center;
+  font: 14px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.55); padding: 8px 12px; border-radius: 10px; }
+#ui input { flex: 1; }
+body.render #ui { display: none; }
+</style>
+</head>
+<body>
+<svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <symbol id="mascot" viewBox="70 94 892 1323"><image href="../../../web/public/login_hero.png" width="1024" height="1536"/></symbol>
+    <symbol id="mark" viewBox="0 0 96 96"><image href="../../../web/public/logo-mark-transparent-96.png" width="96" height="96"/></symbol>
+    <symbol id="investigator" viewBox="0 0 192 192"><image href="../../../web/public/mascot-investigator-192.png" width="192" height="192"/></symbol>
+    <!-- 돋보기 재질: 빛은 왼쪽 위에서. 모두 objectBoundingBox 라 크기와 무관하게 같은 모양이 된다 -->
+    <linearGradient id="lensRim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ACBF2"/><stop offset="0.45" stop-color="#4C97D6"/><stop offset="1" stop-color="#2A659D"/></linearGradient>
+    <radialGradient id="lensGlass" cx="0.35" cy="0.3" r="0.85"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.4"/><stop offset="0.65" stop-color="#CFE5F7" stop-opacity="0.14"/><stop offset="1" stop-color="#4C97D6" stop-opacity="0.28"/></radialGradient>
+    <linearGradient id="lensGrip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4F8AC0"/><stop offset="0.5" stop-color="#245A8C"/><stop offset="1" stop-color="#163C61"/></linearGradient>
+    <linearGradient id="lensCollar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D3E5F4"/><stop offset="0.5" stop-color="#83ACD1"/><stop offset="1" stop-color="#3F6F9C"/></linearGradient>
+    <filter id="lensBlur" primitiveUnits="objectBoundingBox" x="-0.3" y="-0.3" width="1.6" height="1.6"><feGaussianBlur stdDeviation="0.03"/></filter>
+  </defs>
+  <g id="frame"></g>
+</svg>
+<script src="sound.js"></script>
+<div id="ui"><button id="play">▶</button><input id="scrub" type="range" min="0" max="40" step="0.01" value="0"><span id="tc">0.00</span></div>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   DocSuree 소개 영상 — 관통 오브젝트: 돋보기.
+   120 BPM(1박 0.5초). 모든 모양은 seek(t)에서 시간만으로 계산한다.
+   실제 화면(web/public/screenshots)을 벡터로 다시 그렸고, 화면 속 문서 · 이름은 가상의 샘플이다.
+   ══════════════════════════════════════════════════════════════ */
+const DURATION = 40;
+const BG = "#F5F6F8", PANEL = "#FFFFFF", LINE = "#E4E7EC", LINE2 = "#F0F2F5", DASH = "#C6CDD6";
+const TEXT = "#1B1F26", TEXT2 = "#4A515C", TEXT3 = "#667085", BRAND = "#356998", DEEP = "#284F73";
+const ACC = "#4C97D6", ACC_T = "#DCEAF7";   // 강조색: 돋보기와 핵심 단어("근거")에만
+const SCENES = [0, 2, 10, 18, 26, 34, 40];
+
+// ── 시간 · easing (작은 오버슈트만) ──
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const expoOut = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const expoInOut = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2);
+const spring = (dt, w = 18, z = 11) => (dt <= 0 ? 0 : 1 - Math.exp(-z * dt) * Math.cos(w * dt));   // 오버슈트 ≈ 3%
+const grow = (t, at) => clamp(spring(t - at), 0, 1.04);
+
+// ── SVG 헬퍼 ──
+const fmt = (n) => Math.round(n * 100) / 100;
+const pts = (a) => a.map((p) => `${fmt(p[0])},${fmt(p[1])}`).join(" ");
+const line = (a, c = TEXT, w = 2, extra = "") => `<polyline points="${pts(a)}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
+const rect = (x, y, w, h, r, fill, stroke = "none", sw = 0, extra = "") => `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(Math.max(0, w))}" height="${fmt(Math.max(0, h))}" rx="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const circ = (x, y, r, fill, stroke = "none", sw = 0, extra = "") => `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(Math.max(0, r))}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const txt = (x, y, s, size, weight = 600, fill = TEXT, anchor = "start", extra = "") => `<text x="${fmt(x)}" y="${fmt(y)}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" ${extra}>${s}</text>`;
+const g = (tr, inner, extra = "") => `<g transform="${tr}" ${extra}>${inner}</g>`;
+const about = (cx, cy, sx, sy = sx) => `translate(${fmt(cx)},${fmt(cy)}) scale(${fmt(sx)},${fmt(sy)}) translate(${fmt(-cx)},${fmt(-cy)})`;
+const _ctx = document.createElement("canvas").getContext("2d");
+function textW(s, size, weight = 600) { _ctx.font = `${weight} ${size}px Wanted`; return _ctx.measureText(s.replace(/<[^>]+>/g, "")).width; }
+let _id = 0;
+const uid = (p) => `${p}${++_id}`;
+// 마스크로 드러내기: 왼쪽 → 오른쪽으로 자라는 사각 클립
+function wipe(x, y, w, h, k, inner, fromRight = false) {
+  if (k <= 0) return "";
+  const id = uid("w");
+  const cw = w * clamp(k);
+  return `<defs><clipPath id="${id}"><rect x="${fmt(fromRight ? x + w - cw : x)}" y="${fmt(y)}" width="${fmt(cw)}" height="${fmt(h)}"/></clipPath></defs><g clip-path="url(#${id})">${inner}</g>`;
+}
+function circleClip(cx, cy, r, inner) {
+  const id = uid("c");
+  return `<defs><clipPath id="${id}"><circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(Math.max(0, r))}"/></clipPath></defs><g clip-path="url(#${id})">${inner}</g>`;
+}
+
+// ── 구간 타임라인: [시작, 끝, 목표값] 을 차례로 적용 ──
+function track(t, init, segs, ease = expoInOut) {
+  let cur = { ...init };
+  for (const [t0, t1, to] of segs) {
+    if (t <= t0) break;
+    const k = ease(prog(t, t0, t1));
+    const next = { ...cur };
+    for (const key of Object.keys(to)) next[key] = typeof to[key] === "number" ? lerp(cur[key] ?? to[key], to[key], k) : (k >= 0.5 ? to[key] : cur[key]);
+    cur = next;
+  }
+  return cur;
+}
+
+/* ══════════════════════════ 실제 화면 (벡터로 다시 그림) ══════════════════════════ */
+const NAV = [["홈", 89], ["단일 검토", 127], ["비교 검토", 165], ["폴더 검토", 203], ["체크리스트 검토", 241], ["검토 기준", 279], ["검토 기록", 317], ["설정", 355]];
+const SEARCH = { x: 1697, y: 28 };
+function navIcon(i, x, y, c) {
+  const L = (a) => line(a, c, 1.8);
+  return [
+    L([[x - 7, y + 1], [x, y - 6], [x + 7, y + 1]]) + L([[x - 5, y], [x - 5, y + 7], [x + 5, y + 7], [x + 5, y]]),
+    rect(x - 5, y - 7, 10, 14, 2, "none", c, 1.8) + L([[x - 2, y - 1], [x + 2, y - 1]]),
+    L([[x - 6, y - 3], [x + 6, y - 3]]) + L([[x + 3, y - 6], [x + 6, y - 3], [x + 3, y]]) + L([[x + 6, y + 4], [x - 6, y + 4]]) + L([[x - 3, y + 1], [x - 6, y + 4], [x - 3, y + 7]]),
+    `<path d="M${x - 7},${y - 5} h5 l2,2 h7 v10 h-14 Z" fill="none" stroke="${c}" stroke-width="1.8" stroke-linejoin="round"/>`,
+    rect(x - 5, y - 6, 10, 13, 2, "none", c, 1.8) + L([[x - 2, y + 1], [x, y + 3], [x + 3, y - 2]]),
+    L([[x - 6, y - 4], [x + 6, y - 4]]) + L([[x - 6, y], [x + 6, y]]) + L([[x - 6, y + 4], [x + 6, y + 4]]),
+    circ(x, y, 7, "none", c, 1.8) + L([[x, y - 4], [x, y], [x + 3, y + 2]]),
+    circ(x, y, 6.5, "none", c, 1.8) + circ(x, y, 2.5, "none", c, 1.8),
+  ][i];
+}
+function shell(t, active, activeK = 1, header = "home") {
+  let s = rect(0, 0, 1920, 944, 0, BG);
+  // 사이드바
+  s += rect(0, 0, 215, 944, 0, PANEL) + line([[215, 0], [215, 944]], LINE, 1.5);
+  s += `<use href="#mark" x="16" y="8" width="40" height="40"/>` + txt(62, 26, "DocSuree", 17, 800, BRAND) + txt(62, 43, "문서 검토 서비스", 11, 500, TEXT3);
+  NAV.forEach(([label, y], i) => {
+    const on = i === active;
+    if (on) s += rect(12, y - 18, 191 * activeK, 36, 8, BRAND);
+    const c = on && activeK > 0.5 ? "#fff" : TEXT2;
+    s += navIcon(i, 33, y, c) + txt(52, y + 5, label, 13, on ? 700 : 500, c);
+  });
+  s += line([[16, 845], [199, 845]], LINE, 1.5) + rect(16, 862, 183, 66, 10, PANEL, LINE, 1.5);
+  s += txt(30, 886, "소속 팀", 11, 500, TEXT3) + txt(30, 910, "예시팀", 13, 800, TEXT);
+  // 헤더
+  s += rect(215, 0, 1705, 58, 0, PANEL) + line([[215, 58], [1920, 58]], LINE, 1.5);
+  if (header === "home") s += txt(262, 33, "2026년 10월 27일 화요일", 13, 600, TEXT2) + txt(452, 33, "예시팀", 13, 600, TEXT2);
+  else s += [["업로드", 241], ["검토", 303], ["검토 결과", 351]].map(([l, x], i) => txt(x, 33, l, 13, (header === "review") === (i === 2) ? 700 : 500, (header === "review") === (i === 2) ? BRAND : TEXT2) + ((header === "review") === (i === 2) ? line([[x, 52], [x + textW(l, 13, 700), 52]], BRAND, 2.5) : "")).join("");
+  s += `<path d="M1728,22 a6,6 0 0 1 12,0 v6 l2,3 h-16 l2,-3 Z" fill="none" stroke="${TEXT2}" stroke-width="1.8" stroke-linejoin="round"/>` + line([[1732, 34], [1736, 34]], TEXT2, 1.8);
+  s += line([[1762, 14], [1762, 42]], LINE, 1.5) + circ(1790, 28, 14, BRAND) + txt(1790, 33, "홍", 12, 800, "#fff", "middle") + txt(1812, 33, "홍길동님 ▾", 13, 600, TEXT);
+  return s;
+}
+
+// 홈 (screenshots/home.png)
+const HOME_CARDS = [["단일 검토", "문서 한 개에서 고칠 곳을 찾습니다", 269, 153], ["비교 검토", "두 문서를 비교해 빠진 요건을 찾습니다", 673, 153],
+  ["폴더 검토", "폴더를 올려 문서끼리 맞는지 확인합니다", 269, 366], ["체크리스트 검토", "체크리스트로 평가표 초안을 만듭니다", 673, 366]];
+const RECENT = [["LIB-SRS-001_한빛도서관_요구사항명세서.pdf", "단일 검토 · 홍길동", "수정 사항 7건", "1일 전"],
+  ["LIB-SRS-001 ↔ LIB-SDD-001 상세설계서", "비교 검토 · 홍길동", "누락 2건", "2일 전"],
+  ["LIB-2026-01_산출물", "폴더 검토 · 홍길동", "수정 사항 3건", "3일 전"],
+  ["LIB-SDD-001_한빛도서관_상세설계서.docx", "단일 검토 · 홍길동", "수정 사항 없음", "5일 전"]];
+function home(t) {
+  let s = shell(t, 0, 1, "home");
+  s += txt(265, 104, "홍길동 님, 환영합니다", 26, 800, DEEP) + txt(266, 128, "어떤 문서를 검토할까요?", 13, 500, TEXT3);
+  HOME_CARDS.forEach(([title, desc, x, y]) => {
+    s += rect(x, y, 388, 197, 16, PANEL, LINE, 1.5) + circ(x + 42, y + 42, 22, BRAND) + rect(x + 35, y + 33, 14, 18, 3, "none", "#fff", 2);
+    s += txt(x + 20, y + 92, title, 15, 800, TEXT) + txt(x + 20, y + 115, desc, 12, 500, TEXT3) + line([[x + 348, y + 162], [x + 358, y + 162], [x + 354, y + 158]], TEXT3, 1.6);
+  });
+  s += rect(1076, 153, 791, 420, 16, PANEL, LINE, 1.5) + circ(1108, 190, 9, "none", TEXT2, 1.8) + txt(1130, 195, "최근 검토", 15, 800, TEXT);
+  s += rect(1747, 174, 100, 34, 8, BRAND) + txt(1797, 196, "모두 보기 →", 13, 700, "#fff", "middle");
+  RECENT.forEach(([name, sub, st, when], i) => {
+    const y = 240 + i * 78;
+    s += rect(1112, y - 18, 22, 28, 4, LINE2, DASH, 1.2) + txt(1150, y - 2, name, 13, 700, TEXT) + txt(1150, y + 18, sub, 11, 500, TEXT3);
+    s += txt(1580, y + 4, st, 13, 600, TEXT2) + txt(1708, y + 4, when, 13, 500, TEXT3) + line([[1100, y + 38], [1846, y + 38]], LINE2, 1.2);
+  });
+  s += rect(269, 579, 791, 328, 16, PANEL, LINE, 1.5) + txt(323, 618, "검토 기준", 15, 800, TEXT) + rect(940, 597, 100, 34, 8, BRAND) + txt(990, 619, "모두 보기 →", 13, 700, "#fff", "middle");
+  [["공통 기준", "항상 적용", 0], ["팀 기준", "자동 적용", 1], ["추가 기준", "등록 없음", 2]].forEach(([a, b, i]) => {
+    const x = 303 + i * 72;
+    s += g(`rotate(${i * 5} ${x + 37} 710)`, rect(x, 652, 74, 110, 6, PANEL, i === 0 ? BRAND : DASH, 1.5) + txt(x + 10, 678, a, 11, 800, i === 0 ? BRAND : TEXT2) + rect(x + 10, 692, 50, 4, 2, LINE) + rect(x + 10, 702, 40, 4, 2, LINE) + txt(x + 10, 748, b, 10, 500, TEXT3));
+  });
+  s += rect(545, 678, 495, 82, 12, LINE2) + txt(562, 708, "공통 기준", 14, 800, BRAND) + txt(632, 708, "항상 적용", 11, 500, TEXT3) + txt(562, 738, "모든 문서에 기본으로 적용되는 기준입니다.", 12, 500, TEXT2);
+  s += rect(1076, 589, 791, 318, 16, PANEL, LINE, 1.5) + txt(1130, 634, "무엇이든 물어보세요", 15, 800, TEXT) + txt(1096, 668, "DoSuree 가 검토 기록 · 팀 기준 · 문서 본문을 읽고 답합니다.", 12, 500, TEXT3);
+  s += rect(1096, 690, 751, 46, 23, PANEL, LINE, 1.5) + txt(1116, 718, "예: 이번 주 검토 중 미검토가 남은 건 뭐야?", 13, 500, TEXT3) + circ(1824, 713, 17, BRAND) + line([[1817, 713], [1830, 713], [1825, 708]], "#fff", 2);
+  return s;
+}
+
+// 업로드 칸 아이콘: 빈 문서 + 올리기 화살표 → 놓으면 PDF 문서 + 확인
+function docIcon(cx, cy, pdf) {
+  const w = 46, h = 58, x = cx - w / 2, y = cy - h / 2, c = pdf ? BRAND : TEXT3;
+  let s = `<path d="M${x},${y + 5} a5,5 0 0 1 5,-5 H${x + w - 14} L${x + w},${y + 14} V${y + h - 5} a5,5 0 0 1 -5,5 H${x + 5} a5,5 0 0 1 -5,-5 Z" fill="${PANEL}" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>`;
+  s += `<path d="M${x + w - 14},${y} V${y + 9} a5,5 0 0 0 5,5 H${x + w}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>`;
+  if (pdf) s += rect(x + 7, y + 22, 26, 14, 3, "#DC2626") + txt(x + 20, y + 33, "PDF", 9, 800, "#fff", "middle") + rect(x + 7, y + 42, 28, 3, 1.5, LINE) + rect(x + 7, y + 49, 20, 3, 1.5, LINE);
+  else s += rect(x + 8, y + 24, 26, 3, 1.5, DASH) + rect(x + 8, y + 32, 30, 3, 1.5, DASH) + rect(x + 8, y + 40, 18, 3, 1.5, DASH);
+  const bx = x + w + 2, by = y + h - 4;
+  s += circ(bx, by, 13, BRAND, PANEL, 2.5);
+  s += pdf ? line([[bx - 5, by], [bx - 1, by + 4], [bx + 5, by - 4]], "#fff", 2.2) : line([[bx, by + 6], [bx, by - 5]], "#fff", 2.2) + line([[bx - 5, by], [bx, by - 5], [bx + 5, by]], "#fff", 2.2);
+  return s;
+}
+
+// 단일 검토 업로드 (captures 03-single 구성)
+const DROP = { x: 300, y: 250, w: 1520, h: 300, cx: 1060, cy: 390 };
+const FILE = "LIB-SRS-001_한빛도서관_요구사항명세서.pdf";
+function single(t) {
+  let s = shell(t, 1, 1, "upload");
+  s += txt(262, 104, "단일 문서 검토", 24, 800, TEXT) + txt(262, 130, "검토할 문서를 올려 주세요. 공통 기준 + 예시팀 기준으로 검토합니다.", 13, 500, TEXT3);
+  s += rect(262, 154, 1598, 700, 16, PANEL, LINE, 1.5) + txt(300, 196, "검토 대상 문서", 15, 800, TEXT) + txt(300, 220, "검토할 문서 한 개 · 예: 요구사항명세서, 설계서, 시험계획서", 12, 500, TEXT3);
+  const attached = t > 6.0;
+  s += rect(DROP.x, DROP.y, DROP.w, DROP.h, 14, attached ? "#F4F8FC" : BG, attached ? BRAND : DASH, 2, attached ? "" : `stroke-dasharray="10 8"`);
+  if (!attached) {
+    s += docIcon(DROP.cx, 392, false);
+    s += txt(DROP.cx, 470, "파일을 여기에 끌어다 놓으세요", 15, 700, TEXT2, "middle") + txt(DROP.cx, 496, "지원 형식: .hwpx, .hwp, .docx, .pdf, .md, .txt (최대 30MB)", 12, 500, TEXT3, "middle");
+    s += rect(DROP.cx - 52, 512, 104, 32, 8, BRAND) + txt(DROP.cx, 533, "파일 선택", 13, 700, "#fff", "middle");
+  } else {
+    s += g(about(DROP.cx, 392, grow(t, 5.95)), docIcon(DROP.cx, 392, true));
+    const k = grow(t, 6.0);
+    s += g(about(DROP.cx, 470, k), txt(DROP.cx, 478, FILE, 15, 700, TEXT, "middle"));
+    if (t > 6.5) s += g(about(DROP.cx, 515, grow(t, 6.5)), rect(DROP.cx - 52, 498, 104, 32, 16, "#E7F0F8") + txt(DROP.cx, 519, "✓ 첨부 완료", 13, 700, BRAND, "middle"));
+  }
+  s += txt(300, 610, "추가 검토 기준", 14, 800, TEXT) + txt(300, 632, "기본 검토는 항상 적용됩니다.", 12, 500, TEXT3) + rect(470, 598, 70, 30, 15, LINE2, LINE, 1.2) + txt(505, 618, "안 씀", 12, 700, TEXT2, "middle");
+  // 검토 시작 버튼 — 누르면 진행 막대로 차오른다
+  const bx = 1700, by = 790, bw = 136, bh = 42;
+  const press = t > 8.5 && t < 8.7 ? 0.96 : 1;
+  const fill = expoInOut(prog(t, 8.7, 9.6));
+  s += g(about(bx + bw / 2, by + bh / 2, press), rect(bx, by, bw, bh, 10, attached ? BRAND : "#9DB2C8") + rect(bx, by, bw * fill, bh, 10, DEEP) + txt(bx + bw / 2, by + 27, fill > 0 ? "검토 중…" : "검토 시작 →", 14, 700, "#fff", "middle"));
+  return s;
+}
+
+// 검토 결과 (screenshots/review-screen.png 구성). 문서는 가상 샘플.
+const PAGE = { x: 300, y: 196, w: 1040, h: 734 };
+const DOC = [
+  ["5. 기능 요구사항", "h"],
+  ["REQ-001 이용자는 제목, 저자, ISBN 으로 도서를 검색한다."],
+  ["REQ-002 대출 기간은 14일로 한다."],
+  ["REQ-003 반납 기한은 대출일로부터 7일이다.", "llm"],
+  ["[표] 대출 화면 구성 요소", "rule", "형식"],
+  ["REQ-004 예약 도서가 반납되면 알린다. 알림 방식은 TBD.", "rule", "형식"],
+  ["REQ-006 이용자는 대여 기록을 최근 순으로 조회한다.", "llm"],
+  ["REQ-007 무인 반납기는 RFID 태그를 읽는다.", "rule", "표현"],
+  ["REQ-008 월별 통계를 적절한 형식으로 내려받는다.", "rule", "표현"],
+  ["화면 구성은 간략 히 기술한다.", "llm"],
+  ["시스템은 검색에 가능한 한 빠르게 응답한다.", "rule", "표현"],
+  ["6. 인터페이스 요구사항", "h"],
+];
+const LY = (i) => PAGE.y + 70 + i * 54;
+const LX = PAGE.x + 70;
+const Q1 = { line: 9, text: "화면 구성은 간략 히 기술한다", card: 0 };
+const Q2 = { line: 3, text: "반납 기한은 대출일로부터 7일이다", card: 1 };
+const Q3 = { text: "연체료는 하루 100원으로 한다", card: 2 };
+const CARDS = [
+  { cat: "표현", tag: "띄어쓰기", body: "‘간략 히’는 ‘간략히’로 붙여 씁니다", q: Q1, at: 15.5 },
+  { cat: "내용", tag: "모순", body: "대출 기간(14일)과 반납 기한(7일)이 다릅니다", q: Q2, at: 16.0 },
+  { cat: "내용", tag: "누락", body: "연체료 기준이 정해져 있지 않습니다", q: Q3, at: 23.0 },
+];
+const CX = 1425, CW = 446, CY0 = 300, CH = 186, CGAP = 16;
+const cardY = (i) => CY0 + i * (CH + CGAP);
+const quoteBox = (i) => ({ x: CX + 18, y: cardY(i) + 96, w: CW - 36, h: 44 });
+
+function docLine(t, i, marks) {
+  const [s0, kind] = DOC[i];
+  const y = LY(i);
+  let s = "";
+  const m = marks[i];
+  if (m && m.hl > 0) s += rect(LX - 6, y - 22, (textW(s0, 21, 500) + 12) * m.hl, 32, 5, ACC_T);
+  if (m && m.match != null) {
+    // 원문 대조: 인용과 같은 글자가 한 글자씩 강조색 밑줄로
+    const q = m.quote, start = s0.indexOf(q);
+    const pre = s0.slice(0, start), n = Math.floor(m.match * q.length);
+    const x0 = LX + textW(pre, 21, 500);
+    s += line([[x0, y + 8], [x0 + textW(q.slice(0, n), 21, 500), y + 8]], ACC, 3);
+  }
+  s += txt(LX, y, s0, kind === "h" ? 22 : 21, kind === "h" ? 800 : 500, kind === "h" ? DEEP : TEXT);
+  return s;
+}
+function review(t, st) {
+  let s = shell(t, 1, 1, "review");
+  s += txt(241, 98, "← 검토 기록", 13, 600, TEXT2) + rect(1792, 80, 96, 34, 8, PANEL, BRAND, 1.5) + txt(1840, 102, "+ 새 검토", 13, 700, BRAND, "middle");
+  // PDF 뷰어
+  s += rect(248, 133, 1127, 797, 14, PANEL, LINE, 1.5);
+  s += rect(264, 146, 38, 22, 5, "#E7F0F8") + txt(283, 162, "PDF", 11, 800, BRAND, "middle") + txt(312, 162, FILE, 13, 600, TEXT2);
+  s += txt(1090, 162, "3 / 12쪽", 12, 600, TEXT3) + rect(1147, 145, 66, 26, 6, "#E7F0F8") + txt(1180, 162, "형광펜", 12, 700, BRAND, "middle");
+  s += txt(1240, 162, "−   140%   +", 12, 600, TEXT2) + rect(1338, 149, 16, 16, 3, "none", TEXT3, 1.5);
+  s += line([[249, 184], [1374, 184]], LINE, 1.5) + rect(249, 185, 1125, 744, 0, LINE2);
+  const pid = uid("pg");
+  s += `<defs><clipPath id="${pid}"><rect x="249" y="185" width="1125" height="744"/></clipPath></defs><g clip-path="url(#${pid})">`;
+  s += rect(PAGE.x, PAGE.y, PAGE.w, PAGE.h + 40, 4, PANEL, LINE, 1.5) + txt(PAGE.x + 40, PAGE.y + 30, "LIB-SRS-001   한빛 도서관 대출 관리 시스템", 11, 500, TEXT3);
+  DOC.forEach((_, i) => (s += docLine(t, i, st.marks)));
+  // 규칙 검사 칩 · LLM 이 볼 줄(점선)
+  DOC.forEach(([s0, kind, chipLabel], i) => {
+    const at = st.scanAt[i];
+    if (at == null || t < at) return;
+    const y = LY(i);
+    if (kind === "rule") s += g(about(PAGE.x + PAGE.w - 70, y - 6, grow(t, at)), rect(PAGE.x + PAGE.w - 104, y - 20, 68, 28, 14, LINE2, DASH, 1.2) + txt(PAGE.x + PAGE.w - 70, y - 1, chipLabel, 13, 700, TEXT2, "middle"));
+    if (kind === "llm") s += wipe(LX - 12, y - 30, textW(s0, 21, 500) + 24, 46, expoOut(prog(t, at, at + 0.3)), rect(LX - 10, y - 26, textW(s0, 21, 500) + 20, 40, 7, "none", DASH, 2, `stroke-dasharray="8 6"`));
+  });
+  s += `</g>`;
+  // 결과 패널
+  s += rect(1408, 133, 479, 797, 14, PANEL, LINE, 1.5) + txt(1424, 172, "검토 결과", 18, 800, TEXT);
+  [["수정 사항", 1424], ["검토 못 한 부분", 1510], ["기준 판정", 1636]].forEach(([l, x], i) => (s += txt(x, 214, l, 13, i === 0 ? 700 : 500, i === 0 ? BRAND : TEXT2) + (i === 0 ? line([[x, 226], [x + textW(l, 13, 700), 226]], BRAND, 2.5) : "")));
+  s += line([[1408, 232], [1887, 232]], LINE, 1.5) + txt(1424, 270, "검사", 12, 500, TEXT3) + rect(1456, 252, 74, 28, 7, PANEL, LINE, 1.2) + txt(1468, 271, "전체 ▾", 12, 700, TEXT) + txt(1544, 270, "정렬", 12, 500, TEXT3) + rect(1576, 252, 92, 28, 7, PANEL, LINE, 1.2) + txt(1588, 271, "확실도순 ▾", 12, 700, TEXT);
+  if (st.dropChip > 0) s += g(about(st.chipX, st.chipY, st.dropChip), rect(st.chipX - 64, st.chipY - 15, 128, 30, 15, LINE2, DASH, 1.2) + txt(st.chipX, st.chipY + 5, "근거 없음 1건", 12, 700, TEXT2, "middle"));
+  CARDS.forEach((c, i) => {
+    const k = st.cardK[i];
+    if (k <= 0) return;
+    const y = cardY(i);
+    let cs = rect(CX, y, CW, CH, 14, PANEL, LINE, 1.5);
+    cs += rect(CX + 18, y + 18, 44, 24, 6, LINE2) + txt(CX + 40, y + 35, c.cat, 12, 700, TEXT2, "middle") + txt(CX + 72, y + 35, c.tag, 12, 600, TEXT3);
+    cs += txt(CX + 18, y + 72, c.body, 15, 700, TEXT);
+    const qb = quoteBox(i), qk = st.quoteK[i];
+    cs += txt(CX + 18, qb.y - 6, "판정 근거 · 원문 인용", 11, 600, TEXT3);
+    cs += wipe(qb.x, qb.y, qb.w, qb.h, qk, rect(qb.x, qb.y, qb.w, qb.h, 8, BG) + txt(qb.x + 14, qb.y + 28, `「${c.q.text}」`, 14, 600, TEXT2));
+    cs += rect(CX + CW - 122, y + CH - 40, 104, 28, 7, BRAND) + txt(CX + CW - 70, y + CH - 21, "수정안 만들기", 12, 700, "#fff", "middle");
+    if (st.badge[i] > 0) cs += g(about(CX + CW - 64, y + 30, st.badge[i]), rect(CX + CW - 112, y + 16, 96, 28, 14, "#E7F0F8") + txt(CX + CW - 64, y + 35, "✓ 근거 확인", 12, 700, BRAND, "middle"));
+    // 펼쳐짐(위에서 아래로) · 접힘(가운데로)
+    const fold = st.fold[i];
+    const sy = k * (1 - fold);
+    s += g(about(CX + CW / 2, fold > 0 ? y + CH / 2 : y, 1, Math.max(0.001, Math.min(1, sy))), cs);
+  });
+  return s;
+}
+
+/* DoSuree 대화 (captures/dosuree-chat.png 구성, 캡처 좌표 ×1.2). 질문 · 답은 가상 샘플. */
+const INV = 108, INV_S = INV / 192, CHAT_RING = { x: 1086, y: 326 };
+const ASK = "반납 기한 지적, 근거가 뭐야?";
+const ANS = ["LIB-SRS-001 3쪽에서 대출 기간은 14일인데,", "반납 기한은 대출일로부터 7일로 적혀 있어 서로 맞지 않습니다."];
+const CITE = { x: 782, y: 364, h: 42, q: "「반납 기한은 대출일로부터 7일이다」", src: "LIB-SRS-001 · 3쪽" };
+const citeW = () => textW(CITE.q, 16, 600) + textW(CITE.src, 13, 600) + 64;
+const citeCenter = () => ({ x: CITE.x + 38 + textW(CITE.q, 16, 600) / 2, y: CITE.y + CITE.h / 2 });
+const HISTORY = ["이 검토에서 major 지적만 골라…", "이 문서에서 '권고'가 나오는 곳…", "내가 볼 수 있는 가장 최근 검토…", "major 지적의 근거 원문만 모아줘", "LIB-SDD-001 표 번호 빠진 곳…"];
+const SUGGEST = [["최근 검토 살펴보기", "가장 최근 검토", "3개를 보여줘"], ["자주 나온 지적", "자주 나온 지적을", "검사기별로 정리해줘"],
+  ["같은 지적 찾기", "'표기 규칙' 지적이", "있었던 검토를 찾아줘"], ["문서에서 찾기", "문서에서 '권고'가", "나오는 곳을 찾아줘"]];
+const SEND = { x: 1422, y: 890 };
+function chat(t) {
+  const sent = t >= 31.45;
+  let s = rect(0, 0, 1920, 944, 0, BG);
+  // 사이드바: 지난 대화가 그대로 남고, 새 대화가 맨 위에 붙는다
+  s += rect(0, 0, 278, 944, 0, PANEL) + line([[278, 0], [278, 944]], LINE, 1.5);
+  s += txt(22, 32, "DoSuree", 17, 800, DEEP) + rect(232, 12, 30, 28, 6, PANEL, LINE, 1.2) + line([[243, 19], [243, 33]], TEXT3, 1.5);
+  s += rect(16, 57, 248, 34, 8, BRAND) + txt(140, 79, "+ 새 대화", 13, 700, "#fff", "middle");
+  s += txt(22, 116, "내 대화", 11, 600, TEXT3) + txt(22, 141, "오늘", 11, 600, TEXT3);
+  const item = (y, label, on = false) => (on ? rect(12, y - 21, 256, 34, 8, "#E7F0F8") : "") + rect(26, y - 13, 15, 12, 3, "none", on ? BRAND : TEXT2, 1.5) + txt(50, y, label, 13, on ? 700 : 500, on ? BRAND : TEXT);
+  const newK = sent ? expoOut(prog(t, 31.5, 31.8)) : 0, dy = 39 * newK;
+  if (newK > 0) s += g(about(140, 165, 1, newK), item(169, ASK, true));
+  s += item(169 + dy, "'표기 규칙' 지적이 있었던 검토…") + txt(22, 214 + dy, "지난 7일", 11, 600, TEXT3);
+  HISTORY.forEach((h, i) => (s += item(248 + dy + i * 39, h)));
+  s += line([[16, 873], [264, 873]], LINE, 1.5) + rect(16, 887, 248, 40, 20, PANEL, LINE, 1.2) + circ(38, 907, 12, BRAND) + txt(38, 912, "홍", 11, 800, "#fff", "middle") + txt(58, 912, "홍길동", 13, 600, TEXT);
+  s += rect(1688, 12, 62, 34, 7, PANEL, BRAND, 1.5) + txt(1719, 34, "도움말", 13, 700, BRAND, "middle");
+  s += rect(1766, 12, 130, 34, 7, BRAND) + txt(1831, 34, "← DocSuree 로", 13, 700, "#fff", "middle");
+  // 시작 화면 — 질문을 보내면 접혀 사라진다
+  let w = `<use href="#investigator" x="${fmt(CHAT_RING.x - 71.9 * INV_S)}" y="${fmt(CHAT_RING.y - 74.1 * INV_S)}" width="${INV}" height="${INV}"/>`;
+  w += txt(1100, 430, "무엇을 도와드릴까요?", 30, 800, TEXT, "middle");
+  w += txt(1100, 464, "DoSuree 가 검토 결과 · 팀 기준 · 문서 본문을 읽어 답합니다.", 14, 500, TEXT2, "middle") + txt(1100, 486, "읽기만 하고 판정은 바꾸지 않습니다.", 14, 500, TEXT2, "middle");
+  SUGGEST.forEach(([a, b, c], i) => {
+    const x = 762 + i * 172;
+    w += rect(x, 516, 164, 106, 10, PANEL, LINE, 1.2) + txt(x + 14, 546, a, 13, 800, TEXT) + txt(x + 14, 576, b, 11, 500, TEXT3) + txt(x + 14, 595, c, 11, 500, TEXT3);
+  });
+  s += sent ? wipe(700, 240, 800, 400, 1 - expoInOut(prog(t, 31.5, 31.8)), w, true) : w;
+  // 대화
+  if (sent) {
+    const bw = textW(ASK, 17, 600) + 44;
+    s += g(about(1458 - bw / 2, 186, grow(t, 31.6)), rect(1458 - bw, 162, bw, 48, 24, "#E7F0F8") + txt(1458 - 22, 192, ASK, 17, 600, TEXT, "end"));
+  }
+  if (t > 31.85) {
+    s += `<use href="#mark" x="742" y="234" width="32" height="32"/>` + txt(784, 256, "DoSuree", 14, 800, DEEP);
+    ANS.forEach((l, i) => (s += wipe(780, 280 + i * 36, textW(l, 18, 500) + 10, 32, expoOut(prog(t, 31.95 + i * 0.3, 32.35 + i * 0.3)), txt(782, 302 + i * 36, l, 18, 500, TEXT))));
+    if (t > 32.6) {
+      const cw = citeW();
+      s += g(about(CITE.x, CITE.y + CITE.h / 2, grow(t, 32.6)), rect(CITE.x, CITE.y, cw, CITE.h, 10, BG, LINE, 1.2) + rect(CITE.x + 14, CITE.y + 12, 14, 18, 3, "none", TEXT3, 1.5) +
+        txt(CITE.x + 38, CITE.y + 27, CITE.q, 16, 600, TEXT2) + txt(CITE.x + 46 + textW(CITE.q, 16, 600), CITE.y + 27, CITE.src, 13, 600, TEXT3));
+      if (t > 33.45) s += g(about(CITE.x + cw + 60, CITE.y + 21, grow(t, 33.45)), rect(CITE.x + cw + 12, CITE.y + 7, 96, 28, 14, "#E7F0F8") + txt(CITE.x + cw + 60, CITE.y + 26, "✓ 근거 확인", 12, 700, BRAND, "middle"));
+    }
+  }
+  // 입력창: 한 글자씩 타이핑 → 보내기
+  s += rect(742, 826, 716, 97, 14, PANEL, LINE, 1.5);
+  const typed = t < 30.6 || sent ? "" : ASK.slice(0, Math.ceil(ASK.length * prog(t, 30.6, 31.3)));
+  s += typed ? txt(760, 858, typed, 16, 500, TEXT) + (Math.floor(t * 4) % 2 ? "" : rect(763 + textW(typed, 16, 500), 841, 2, 22, 1, TEXT)) : txt(760, 858, "무엇이든 요청하세요", 16, 500, TEXT3);
+  s += txt(760, 896, "Enter 보내기 · Shift+Enter 줄바꿈 · 답은 검토 기록과 문서 본문에서만", 12, 500, TEXT3);
+  const press = t > 31.4 && t < 31.6 ? 0.92 : 1;
+  s += g(about(SEND.x, SEND.y, press), rect(SEND.x - 22, SEND.y - 22, 44, 44, 10, BRAND) + `<path d="M${SEND.x - 9},${SEND.y} L${SEND.x + 10},${SEND.y - 8} L${SEND.x + 3},${SEND.y + 10} L${SEND.x},${SEND.y + 2} Z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>`);
+  return s;
+}
+
+/* ══════════════════════════ 관통 오브젝트: 돋보기 ══════════════════════════ */
+// 엔드 카드 마스코트: 돋보기 테 중심(이미지 좌표 353,579), 반지름 ≈227
+const MS_H = 640, MS_S = MS_H / 1323, MS_CX = 640, MS_CY = 470;
+const MS_X0 = MS_CX - (353 - 70) * MS_S, MS_Y0 = MS_CY - (579 - 94) * MS_S;
+const HOOK = { y1: 430, y2: 580, size: 128 };
+function hookWordCenter() {
+  const l2 = "근거는 어디에?", w2 = textW(l2, HOOK.size, 800);
+  return { x: 960 - w2 / 2 + textW("근거", HOOK.size, 800) / 2, y: HOOK.y2 - HOOK.size * 0.34 };
+}
+function lensAt(t) {
+  const hw = hookWordCenter();
+  const qb = (i) => ({ x: quoteBox(i).x + 60, y: quoteBox(i).y + 22 });
+  const ln = (i, f = 0.5) => ({ x: LX + textW(DOC[i][0], 21, 500) * f, y: LY(i) - 8 });
+  const s = track(t, { x: 2150, y: hw.y, r: 120, sw: 16, h: 1, ang: 45 }, [
+    [0.9, 1.4, { x: hw.x, y: hw.y }],                                     // 굴러와 "근거"를 확대
+    [1.55, 2.0, { x: SEARCH.x, y: SEARCH.y, r: 6.5, sw: 1.9, h: 1 }],      // 헤더 검색 아이콘
+    [9.0, 9.45, { x: 1768, y: 811, r: 30, sw: 4, h: 1 }],                   // 검토 시작 버튼 위로
+    [9.5, 10.0, { x: 811, y: 560, r: 900, sw: 4 }],                         // 커지며 결과 화면을 연다
+    [10.0, 10.5, { x: ln(1, 0.08).x, y: ln(1).y, r: 46, sw: 4, h: 1 }],    // 스캐너
+    ...DOC.slice(1, 11).map((_, j) => { const i = j + 1, t0 = 10.5 + j * 0.45; return [t0, t0 + 0.4, { x: ln(i, 0.85).x, y: ln(i).y }]; }),
+    [17.4, 17.9, { x: qb(0).x, y: qb(0).y, r: 40 }],                       // 인용 위로
+    [18.0, 18.6, { x: ln(Q1.line, 0.1).x, y: ln(Q1.line).y }],             // 원문으로
+    [18.6, 19.4, { x: ln(Q1.line, 0.92).x }],                               // 한 글자씩 대조
+    [19.9, 20.3, { x: qb(1).x, y: qb(1).y }],
+    [20.9, 21.5, { x: ln(Q2.line, 0.1).x, y: ln(Q2.line).y }],
+    [21.6, 22.3, { x: ln(Q2.line, 0.92).x }],
+    [22.7, 23.1, { x: qb(1).x + 200, y: qb(1).y - 80 }],
+    [23.5, 23.9, { x: qb(2).x, y: qb(2).y }],
+    [24.2, 24.6, { x: ln(1, 0.3).x, y: ln(1).y }],
+    [24.6, 25.8, { x: ln(10, 0.3).x, y: ln(10).y }],                        // 끝까지 훑어도 없음
+    [26.0, 26.4, { x: qb(2).x + 120, y: qb(2).y }],
+    [29.3, 29.8, { x: 1100, y: 420, r: 60, sw: 5, h: 1 }],                  // 화면 가운데로
+    [29.8, 30.3, { r: 1300 }],                                               // 커지며 대화 화면을 연다
+    [30.3, 30.8, { x: CHAT_RING.x, y: CHAT_RING.y, r: 28.4 * INV_S, sw: 7.5 * INV_S, h: 0, ang: 118 }], // 마스코트 돋보기에 들어감
+    [31.5, 31.9, { x: 1180, y: 236, r: 40, sw: 4, h: 1, ang: 45 }],          // 질문을 보내면 다시 떠오름
+    [32.7, 33.1, { x: citeCenter().x, y: citeCenter().y, r: 46 }],           // 답의 인용 위로
+    [34.0, 34.6, { x: 960, y: 472, r: 170, sw: 14, h: 1 }],                 // 떠올라 화면을 삼킴
+    [35.1, 35.7, { x: MS_CX, y: MS_CY, r: 227 * MS_S, sw: 40 * MS_S, h: 0, ang: 135 }],
+  ]);
+  return s;
+}
+// 호(각도는 SVG 좌표계, 0°=오른쪽 · 90°=아래)
+function arc(cx, cy, R, a0, a1, w, color, op) {
+  if (R <= 0 || w <= 0 || op <= 0) return "";
+  const p = (a) => [cx + Math.cos((a * Math.PI) / 180) * R, cy + Math.sin((a * Math.PI) / 180) * R];
+  const [x1, y1] = p(a0), [x2, y2] = p(a1);
+  return `<path d="M${fmt(x1)},${fmt(y1)} A${fmt(R)},${fmt(R)} 0 0 1 ${fmt(x2)},${fmt(y2)}" fill="none" stroke="${color}" stroke-width="${fmt(w)}" stroke-linecap="round" opacity="${fmt(op)}"/>`;
+}
+// 돋보기: 금속 테 + 유리 + 원통 손잡이 + 그림자. 모든 치수는 반지름 · 두께에 비례한다.
+function lensSvg(L, inner = "") {
+  const { x, y, r } = L, sw = Math.max(L.sw, Math.min(r * 0.13, 12)), ir = r - sw / 2;   // 테가 너무 얇으면 납작해 보인다
+  const soft = 1 - clamp((r - 160) / 240);               // 화면을 여는 큰 돋보기는 유리 · 그림자를 걷어 낸다
+  let handle = "";
+  if (L.h > 0.01) {
+    const x0 = r + sw * 0.2, cl = Math.max(sw * 0.9, r * 0.2) * L.h, gl = r * 0.85 * L.h, gt = Math.max(sw * 1.7, r * 0.24), ct = gt * 0.68;
+    handle = g(`translate(${fmt(x)},${fmt(y)}) rotate(${fmt(L.ang)})`,
+      rect(x0, -ct / 2, cl + gt * 0.2, ct, ct * 0.2, "url(#lensCollar)") +
+      rect(x0 + cl, -gt / 2, gl, gt, gt / 2, "url(#lensGrip)") +
+      rect(x0 + cl + gt * 0.35, -gt * 0.32, Math.max(0, gl - gt * 0.8), gt * 0.14, gt * 0.07, "#fff", "none", 0, `opacity="0.35"`));
+  }
+  let s = "";
+  if (soft > 0.01) {                                       // 바닥에 지는 그림자
+    const off = Math.max(1, r * 0.07);
+    s += `<g transform="translate(${fmt(off * 0.6)},${fmt(off)})" opacity="${fmt(0.2 * soft)}" filter="url(#lensBlur)">` +
+      circ(x, y, r, "none", "#1B3550", sw) + handle.replace(/url\(#lens\w+\)|#fff/g, "#1B3550") + `</g>`;
+  }
+  if (inner) s += circleClip(x, y, ir, inner);
+  s += circ(x, y, ir, "url(#lensGlass)", "none", 0, `opacity="${fmt(soft)}"`);
+  s += arc(x, y, ir * 0.74, 198, 248, ir * 0.09, "#fff", 0.75 * soft) + arc(x, y, ir * 0.74, 258, 266, ir * 0.09, "#fff", 0.6 * soft);   // 유리 반사광
+  s += handle;
+  s += circ(x, y, r, "none", "url(#lensRim)", sw);
+  s += circ(x, y, ir + sw * 0.06, "none", "#1E4D7A", sw * 0.12, `opacity="0.4"`);            // 테 안쪽 그늘
+  s += arc(x, y, r + sw * 0.1, 192, 258, sw * 0.26, "#fff", 0.55);                            // 테 위 하이라이트
+  return s;
+}
+
+/* ══════════════════════════ 카메라 · 커서 ══════════════════════════ */
+function camera(t) {
+  const c = track(t, { cx: 960, cy: 472, z: 1 }, [
+    [2.6, 3.1, { cx: 330, cy: 260, z: 1.9 }],
+    [4.0, 4.5, { cx: 1060, cy: 470, z: 1.15 }],
+    [5.0, 5.5, { cx: 900, cy: 520, z: 1.25 }],
+    [7.4, 7.9, { cx: 1640, cy: 760, z: 1.7 }],
+    [9.4, 10.0, { cx: 960, cy: 472, z: 1.0 }],
+    [10.2, 10.7, { cx: 820, cy: 560, z: 1.32 }],
+    [15.2, 15.7, { cx: 1640, cy: 520, z: 1.5 }],
+    [16.6, 17.0, { cx: 1650, cy: 400, z: 2.0 }],
+    [17.9, 18.4, { cx: 1100, cy: 560, z: 1.12 }],
+    [18.6, 19.0, { cx: 780, cy: LY(Q1.line), z: 1.45 }],
+    [19.8, 20.2, { cx: 1100, cy: 560, z: 1.12 }],
+    [21.4, 21.8, { cx: 780, cy: LY(Q2.line), z: 1.45 }],
+    [22.6, 23.0, { cx: 1600, cy: 620, z: 1.4 }],
+    [24.1, 24.5, { cx: 820, cy: 560, z: 1.25 }],
+    [25.9, 26.3, { cx: 1500, cy: 640, z: 1.45 }],
+    [29.0, 29.5, { cx: 960, cy: 472, z: 1.0 }],
+    [30.3, 30.8, { cx: 1100, cy: 600, z: 1.3 }],
+    [31.5, 32.0, { cx: 1080, cy: 360, z: 1.3 }],
+    [33.6, 34.2, { cx: 960, cy: 472, z: 1.0 }],
+  ]);
+  // 장면마다 1.0 → 1.04 로 미는 느린 줌 (경계에서 끊기지 않게 이어 붙임)
+  let si = SCENES.findIndex((s, i) => t >= s && t < SCENES[i + 1]);
+  if (si < 0) si = SCENES.length - 2;
+  const sp = prog(t, SCENES[si], SCENES[si + 1]);
+  const push = 1 + 0.04 * sp + (si > 0 ? 0.04 * (1 - expoOut(prog(t, SCENES[si], SCENES[si] + 0.6))) : 0);
+  return { ...c, z: c.z * push };
+}
+const camTr = (c) => `translate(960,540) scale(${fmt(c.z)}) translate(${fmt(-c.cx)},${fmt(-c.cy)})`;
+const CLICKS = [3.5, 8.5, 31.45];
+function cursorAt(t) {
+  return track(t, { x: 1100, y: 640, s: 0 }, [
+    [2.2, 2.5, { s: 1 }],
+    [2.6, 3.2, { x: 95, y: 130 }],
+    [4.3, 4.9, { x: 560, y: 860 }],
+    [5.0, 5.8, { x: DROP.cx, y: 430 }],
+    [7.4, 8.0, { x: 1770, y: 815 }],
+    [9.2, 9.5, { s: 0 }],
+    [30.8, 30.9, { x: 1360, y: 960 }],
+    [30.9, 31.1, { s: 1 }],
+    [31.0, 31.38, { x: SEND.x + 4, y: SEND.y + 4 }],
+    [31.9, 32.2, { s: 0 }],
+  ]);
+}
+function cursorSvg(t, c) {
+  if (c.s <= 0.01) return "";
+  const press = CLICKS.some((k) => t > k - 0.05 && t < k + 0.12) ? 0.86 : 1;
+  let s = "";
+  for (const k of CLICKS) if (t > k && t < k + 0.45) s += circ(c.x, c.y, 10 + (t - k) * 70, "none", BRAND, 2, `opacity="${fmt(1 - (t - k) / 0.45)}"`);
+  // 드래그 중인 파일
+  if (t > 4.9 && t < 6.05) {
+    const k = grow(t, 4.9) * (t > 5.85 ? 1 - prog(t, 5.85, 6.05) : 1);
+    s += g(about(c.x + 26, c.y + 34, k), rect(c.x + 8, c.y + 12, 40, 50, 5, PANEL, BRAND, 2) + rect(c.x + 14, c.y + 24, 22, 12, 3, "#DC2626") + txt(c.x + 25, c.y + 33, "PDF", 8, 800, "#fff", "middle") + rect(c.x + 14, c.y + 42, 26, 3, 1.5, LINE) + rect(c.x + 14, c.y + 50, 20, 3, 1.5, LINE));
+  }
+  s += g(`translate(${fmt(c.x)},${fmt(c.y)}) scale(${fmt(c.s * press * 1.15)})`, `<path d="M0,0 L0,24 L6,18 L10,28 L14,26 L10,16 L18,16 Z" fill="#fff" stroke="${TEXT}" stroke-width="1.8" stroke-linejoin="round"/>`);
+  return s;
+}
+
+/* ══════════════════════════ 결과 화면 상태 ══════════════════════════ */
+function reviewState(t) {
+  const marks = {};
+  const scanAt = {};
+  DOC.forEach((_, i) => { if (i >= 1 && i <= 10) scanAt[i] = 10.5 + (i - 1) * 0.45 + 0.3; });
+  const m1 = prog(t, 18.6, 19.4), m2 = prog(t, 21.6, 22.3);
+  marks[Q1.line] = { quote: Q1.text, match: t > 18.6 ? m1 : null, hl: expoOut(prog(t, 19.45, 19.8)) };
+  marks[Q2.line] = { quote: Q2.text, match: t > 21.6 ? m2 : null, hl: expoOut(prog(t, 22.35, 22.7)) };
+  const cardK = CARDS.map((c) => expoOut(prog(t, c.at, c.at + 0.4)));
+  const quoteK = [expoOut(prog(t, 17.0, 17.4)), expoOut(prog(t, 19.9, 20.2)), expoOut(prog(t, 23.4, 23.7))];
+  const badge = [grow(t, 20.0), grow(t, 22.8), 0].map((v, i) => ((i === 0 && t < 20.0) || (i === 1 && t < 22.8) ? 0 : v));
+  const fold = [0, 0, expoInOut(prog(t, 28.0, 28.3))];
+  const chipT = expoInOut(prog(t, 28.5, 28.9));
+  return {
+    marks, scanAt, cardK, quoteK, badge, fold,
+    dropChip: t > 28.05 ? grow(t, 28.05) : 0,
+    chipX: lerp(CX + CW / 2, CX + 82, chipT), chipY: lerp(cardY(2) + CH / 2, cardY(2) + 24, chipT),
+  };
+}
+
+/* ══════════════════════════ 글자 (훅 · 캡션 · 페이오프 · 엔드) ══════════════════════════ */
+function hookText(t) {
+  const sz = HOOK.size;
+  const l1 = txt(960, HOOK.y1, "그럴듯한 지적,", sz, 800, TEXT, "middle");
+  const l2 = `<text x="960" y="${HOOK.y2}" font-size="${sz}" font-weight="800" fill="${TEXT}" text-anchor="middle"><tspan fill="${ACC}">근거</tspan>는 어디에?</text>`;
+  const w1 = textW("그럴듯한 지적,", sz, 800), w2 = textW("근거는 어디에?", sz, 800);
+  return wipe(960 - w1 / 2 - 10, HOOK.y1 - sz, w1 + 20, sz * 1.3, expoOut(prog(t, 0.0, 0.45)), l1) +
+    wipe(960 - w2 / 2 - 10, HOOK.y2 - sz, w2 + 20, sz * 1.3, expoOut(prog(t, 0.5, 0.95)), l2);
+}
+const CAPS = [
+  [7.0, 9.3, "문서 한 개를 올리면"],
+  [13.0, 15.4, "정해진 건 규칙으로, 판단은 사내 LLM이"],
+  [20.4, 23.0, "모든 지적은 원문 인용과 함께 남아요"],
+  [31.9, 33.7, "물어봐도, 근거로 답합니다"],
+];
+function caption(t) {
+  let s = "";
+  for (const [a, b, label] of CAPS) {
+    if (t < a || t > b + 0.4) continue;
+    const w = textW(label, 36, 700) + 72, x = 960 - w / 2, y = 960;
+    const inK = expoOut(prog(t, a, a + 0.35)), outK = expoInOut(prog(t, b, b + 0.35));
+    const body = rect(x, y - 38, w, 72, 36, PANEL, LINE, 2) + txt(960, y + 10, label.replace("근거", `<tspan fill="${ACC}">근거</tspan>`), 36, 700, TEXT, "middle");
+    s += outK > 0 ? wipe(x, y - 40, w, 76, 1 - outK, body, true) : wipe(x, y - 40, w, 76, inK, body);
+  }
+  return s;
+}
+function payoff(t) {
+  if (t < 26.5 || t > 29.5) return "";
+  const W = 1000;
+  const inK = expoInOut(prog(t, 26.5, 26.9)), outK = expoInOut(prog(t, 29.0, 29.4));
+  let body = rect(0, 0, W, 1080, 0, PANEL) + line([[W, 0], [W, 1080]], LINE, 2);
+  const sz = 92;
+  const l1 = `<text x="110" y="470" font-size="${sz}" font-weight="800" fill="${TEXT}"><tspan fill="${ACC}">근거</tspan>가 없으면,</text>`;
+  const l2 = txt(110, 600, "지적하지 않습니다.", sz, 800, TEXT);
+  const w1 = textW("근거가 없으면,", sz, 800), w2 = textW("지적하지 않습니다.", sz, 800);
+  body += wipe(100, 470 - sz, w1 + 20, sz * 1.3, expoOut(prog(t, 27.0, 27.4)) * (1 - prog(t, 28.8, 29.0)), l1);
+  body += wipe(100, 600 - sz, w2 + 20, sz * 1.3, expoOut(prog(t, 27.5, 27.9)) * (1 - prog(t, 28.85, 29.05)), l2);
+  body += wipe(110, 680, 400, 8, expoOut(prog(t, 28.0, 28.3)) * (1 - prog(t, 28.8, 29.0)), rect(110, 680, 400, 8, 4, ACC));
+  return outK > 0 ? wipe(0, 0, W, 1080, 1 - outK, body) : wipe(0, 0, W, 1080, inK, body);
+}
+function endCard(t) {
+  if (t < 35.5) return "";
+  let s = "";
+  const r = lerp(227 * MS_S, 1100, expoInOut(prog(t, 35.7, 36.4)));
+  s += circleClip(MS_CX, MS_CY, r, `<use href="#mascot" x="${fmt(MS_X0)}" y="${fmt(MS_Y0)}" width="${fmt(892 * MS_S)}" height="${fmt(MS_H)}"/>`);
+  const x = 990;
+  const wm = txt(x, 450, "DocSuree", 128, 900, DEEP);
+  s += wipe(x - 6, 330, textW("DocSuree", 128, 900) + 20, 150, expoOut(prog(t, 36.5, 36.9)), wm);
+  const cta = `<text x="${x}" y="540" font-size="46" font-weight="700" fill="${TEXT2}">산출물을 올리고, <tspan fill="${ACC}">근거</tspan>로 확인하세요</text>`;
+  s += wipe(x - 6, 490, textW("산출물을 올리고, 근거로 확인하세요", 46, 700) + 20, 66, expoOut(prog(t, 37.0, 37.4)), cta);
+  s += wipe(x - 6, 575, 700, 40, expoOut(prog(t, 37.5, 37.9)), txt(x, 603, "PDF · Word · HWP · 전 과정 사내망", 26, 600, TEXT3));
+  return s;
+}
+
+/* ══════════════════════════ 프레임 합성 ══════════════════════════ */
+function frame(t) {
+  _id = 0;
+  t = clamp(t, 0, DURATION - 1e-4);
+  const cam = camera(t), L = lensAt(t);
+  let world = rect(-2000, -2000, 6000, 5000, 0, BG);
+  // 훅 글자 (UI 밑)
+  if (t < 2.4) world += hookText(t);
+  // 화면: 홈 → 단일 검토 → 결과
+  let screen = "";
+  if (t >= 1.55 && t < 4.6) {
+    const r = lerp(0, 2300, expoInOut(prog(t, 1.6, 2.2)));
+    const navK = expoOut(prog(t, 3.5, 3.8));
+    let h = home(t);
+    if (t > 3.5) h = h.replace(rect(12, 127 - 18, 0, 36, 8, BRAND), "") + rect(12, 109, 191 * navK, 36, 8, BRAND, "none", 0, `opacity="0.18"`);
+    screen += circleClip(SEARCH.x, SEARCH.y, r, h);
+  }
+  if (t >= 4.0 && t < 10.1) {
+    const k = expoInOut(prog(t, 4.0, 4.6));
+    const id = uid("m");
+    const x0 = lerp(12, 0, k), y0 = lerp(109, 0, k), x1 = lerp(203, 1920, k), y1 = lerp(145, 944, k);
+    screen += `<defs><clipPath id="${id}"><rect x="${fmt(x0)}" y="${fmt(y0)}" width="${fmt(x1 - x0)}" height="${fmt(y1 - y0)}" rx="${fmt(lerp(8, 0, k))}"/></clipPath></defs><g clip-path="url(#${id})">${single(t)}</g>`;
+  }
+  if (t >= 9.5 && t < 30.35) {
+    let rv = review(t, reviewState(t));
+    if (t < 10.0) rv = circleClip(L.x, L.y, L.r, rv);                       // 돋보기 안에서 열림
+    screen += rv;
+  }
+  if (t >= 29.8 && t < 35.2) {
+    let ch = chat(t);
+    if (t < 30.3) ch = circleClip(L.x, L.y, L.r, ch);                       // 돋보기 안에서 열림
+    if (t >= 34.0) {                                                         // 돋보기 안으로 접혀 들어감
+      const k = expoInOut(prog(t, 34.0, 34.9));
+      ch = circleClip(L.x, L.y, lerp(2300, L.r - L.sw / 2, k), g(about(L.x, L.y, lerp(1, 0.16, k)), ch));
+      if (t > 34.9) ch = circleClip(L.x, L.y, L.r * (1 - prog(t, 34.9, 35.2)), ch);
+    }
+    screen += ch;
+  }
+  world += screen;
+  // 엔드 카드
+  world += endCard(t);
+  // 돋보기 (훅에서는 글자를 확대해 보여줌)
+  if (t >= 0.9 && t < 35.95) {
+    let inner = "";
+    if (t < 1.6) inner = rect(L.x - L.r, L.y - L.r, L.r * 2, L.r * 2, 0, BG) + g(about(L.x, L.y, 1.45), hookText(t));
+    if (t > 24.6 && t < 26.6) inner = circ(L.x, L.y, L.r, PANEL) + txt(L.x, L.y + 7, t > 25.9 ? "없음" : "…", 20, 800, TEXT3, "middle");
+    if ((t > 19.4 && t < 19.9) || (t > 22.3 && t < 22.7) || (t > 33.15 && t < 33.45)) inner = circ(L.x, L.y, L.r, PANEL) + txt(L.x, L.y + 9, "✓", 28, 900, ACC, "middle");
+    const sq = t > 28.0 && t < 28.3 ? 1 - 0.12 * Math.sin(prog(t, 28.0, 28.3) * Math.PI) : 1;
+    world += g(about(L.x, L.y, sq), lensSvg(L, inner));
+  }
+  world += cursorSvg(t, cursorAt(t));
+  let s = g(camTr(cam), world);
+  s += payoff(t) + caption(t);
+  return s;
+}
+
+const frameEl = document.getElementById("frame");
+function seek(t) { frameEl.innerHTML = frame(t); }
+window.seek = seek;
+window.DURATION = DURATION;
+const img1 = new Image(); img1.src = "../../../web/public/login_hero.png";
+const img2 = new Image(); img2.src = "../../../web/public/logo-mark-transparent-96.png";
+const img3 = new Image(); img3.src = "../../../web/public/mascot-investigator-192.png";
+window.ready = Promise.all([document.fonts.load("800 40px Wanted"), document.fonts.ready, img1.decode(), img2.decode(), img3.decode()]);
+
+if (location.search.includes("render")) document.body.classList.add("render");
+const scrub = document.getElementById("scrub"), tc = document.getElementById("tc"), playBtn = document.getElementById("play");
+let playing = false, t0 = 0, base = 0;
+function show(t) { seek(t); scrub.value = t; tc.textContent = t.toFixed(2); }
+scrub.oninput = () => { playing = false; show(+scrub.value); };
+playBtn.onclick = () => { playing = !playing; base = +scrub.value; t0 = performance.now(); if (playing) requestAnimationFrame(loop); };
+function loop(now) { if (!playing) return; show((base + (now - t0) / 1000) % DURATION); requestAnimationFrame(loop); }
+const start = parseFloat(new URLSearchParams(location.search).get("t") || "0");
+window.ready.then(() => show(start));
+</script>
+</body>
+</html>
