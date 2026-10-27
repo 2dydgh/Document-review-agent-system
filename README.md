@@ -18,14 +18,6 @@
 
 </div>
 
-<br />
-
-<img src="web/public/screenshots/home.png" width="100%" alt="DocSuree home dashboard" />
-
-<div align="center">
-  <sub>단일 · 비교 · 폴더 · 체크리스트 검토와 검토 기준, DoSuree 대화를 한 화면에서 시작합니다.</sub>
-</div>
-
 ---
 
 ## DocSuree는 무엇을 하는가
@@ -70,7 +62,7 @@ PDF·Word·HWP 산출물을 올리면 팀의 검토 기준에 따라 **형식·�
 
 ## 실제 검토 화면
 
-<img src="web/public/screenshots/review-screen.png" width="100%" alt="DocSuree review result with PDF highlights and findings" />
+<img src="docs/manual/screens/review.png" width="100%" alt="DocSuree 검토 결과 — 원문 형광펜, 지적별 원문 인용과 근거 확인, 근거 없음 1건" />
 
 원문 형광펜과 지적 목록을 나란히 봅니다. 검토자는 지적마다 반영·해당없음을 판정하고,
 회신본을 올리면 이전 검토와 대조해 **반영 확인**(이전 지적별 상태 · 신규 지적)을 받습니다.
@@ -166,7 +158,7 @@ CSV로 내보낼 수도 있습니다.
 
 ## DoSuree 어시스턴트
 
-<img src="web/public/screenshots/dosuree-chat.png" width="100%" alt="DoSuree assistant chat" />
+<img src="docs/manual/screens/chat.png" width="100%" alt="DoSuree 대화 — 질문에 원문 인용을 붙여 답한다" />
 
 검토 결과 화면 옆 패널(우하단 마스코트)에서 **DoSuree** 와 대화합니다.
 "이 지적은 왜 나왔지?", "문서에 보안 요구사항이 어디 있지?" 처럼 결과와 원문을 두고 묻습니다.
@@ -181,7 +173,7 @@ CSV로 내보낼 수도 있습니다.
 
 ## 검토 흐름
 
-<img src="web/public/screenshots/upload.png" width="100%" alt="DocSuree document upload" />
+<img src="docs/manual/screens/upload.png" width="100%" alt="DocSuree 단일 문서 검토 — PDF 첨부" />
 
 ```text
 문서 업로드 (PDF · DOCX · HWP · HWPX · MD · TXT)

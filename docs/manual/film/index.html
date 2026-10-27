@@ -624,6 +624,16 @@ const frameEl = document.getElementById("frame");
 function seek(t) { frameEl.innerHTML = frame(t); }
 window.seek = seek;
 window.DURATION = DURATION;
+// README 정지 화면: 카메라 · 돋보기 · 커서 · 자막 없이 화면 한 장을 원래 크기(1920×944)로
+const SHOTS = { home: () => home(2.5), upload: () => single(7.0), review: () => review(33, reviewState(33)), chat: () => chat(33.8) };
+window.shot = (name) => {
+  _id = 0;
+  const stage = document.getElementById("stage");
+  stage.setAttribute("viewBox", "0 0 1920 944");
+  stage.style.height = "944px";
+  const icon = name === "chat" ? "" : lensSvg({ x: SEARCH.x, y: SEARCH.y, r: 6.5, sw: 1.9, h: 1, ang: 45 });   // 헤더 검색 아이콘(영상에서는 돋보기가 이 자리에 머문다)
+  frameEl.innerHTML = SHOTS[name]() + icon;
+};
 const img1 = new Image(); img1.src = "../../../web/public/login_hero.png";
 const img2 = new Image(); img2.src = "../../../web/public/logo-mark-transparent-96.png";
 const img3 = new Image(); img3.src = "../../../web/public/mascot-investigator-192.png";

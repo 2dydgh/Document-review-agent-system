@@ -2,7 +2,8 @@
 //   node docs/manual/film/render.cjs stills [t1 t2 ...]   → docs/manual/build/stills/*.png (박자별 확인용)
 //   node docs/manual/film/render.cjs audio                → docs/manual/build/soundtrack.wav
 //   node docs/manual/film/render.cjs video                → docs/manual/build/DocSuree-소개영상.mp4 (60fps, 서브프레임 6장 모션 블러 + 소리)
-//   node docs/manual/film/render.cjs gif                  → docs/manual/DocSuree-소개영상.gif (README용, 800px · 12fps · 소리 없음)
+//   node docs/manual/film/render.cjs gif                  → docs/manual/DocSuree-소개영상.gif (README용, 800px · 15fps · 소리 없음)
+//   node docs/manual/film/render.cjs shots                → docs/manual/screens/{upload,review,chat}.png (README 정지 화면, home 도 찍을 수 있다)
 // build/ 는 git 에서 빠진다. 이 저장소는 node_modules 를 두지 않으므로 Playwright 위치를 환경변수로 넘긴다.
 //   PLAYWRIGHT=/path/to/node_modules/playwright node docs/manual/film/render.cjs video
 const path = require("path");
@@ -23,10 +24,10 @@ function loadPlaywright() {
   catch { throw new Error("Playwright 를 찾을 수 없습니다. PLAYWRIGHT=<node_modules/playwright 경로> 로 지정하세요."); }
 }
 
-async function openPage() {
+async function openPage(height = 1080) {
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch({ args: ["--allow-file-access-from-files"] });
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: 1920, height }, deviceScaleFactor: 1 });
   page.on("pageerror", (e) => console.error("PAGE ERROR:", e.message));
   await page.goto("file://" + path.join(ROOT, "index.html") + "?render");
   await page.evaluate(() => window.ready);
@@ -86,12 +87,38 @@ async function video() {
   console.log("video →", MP4);
 }
 
-function gif() {
-  const pal = path.join(BUILD, "palette.png");
-  const vf = "fps=12,scale=800:-1:flags=lanczos";
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", MP4, "-vf", `${vf},palettegen=max_colors=128:stats_mode=diff`, pal]);
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", MP4, "-i", pal, "-lavfi", `${vf}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`, GIF]);
+// GIF 는 MP4 에서 뽑지 않고 페이지에서 바로 찍는다. MP4 의 모션 블러(서브프레임 평균)는 60fps 에서는
+// 자연스럽지만, 15fps 로 솎으면 빠르게 움직이는 돋보기가 여러 겹 잔상으로 남아 깨져 보인다.
+async function gif(fps = 15, width = 800) {
+  fs.mkdirSync(BUILD, { recursive: true });
+  const { browser, page } = await openPage();
+  const duration = await page.evaluate(() => window.DURATION);
+  const frames = path.join(BUILD, "gif-frames.mkv"), pal = path.join(BUILD, "palette.png");
+  const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "png", "-i", "-",
+    "-vf", `scale=${width}:-1:flags=lanczos`, "-c:v", "ffv1", frames], { stdio: ["pipe", "inherit", "inherit"] });
+  for (let f = 0; f < Math.round(duration * fps); f++) {
+    await page.evaluate((x) => window.seek(x), f / fps);
+    const buf = await page.screenshot({ type: "png" });
+    if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once("drain", r));
+  }
+  ff.stdin.end();
+  await new Promise((r, j) => ff.on("close", (c) => (c === 0 ? r() : j(new Error("ffmpeg exit " + c)))));
+  await browser.close();
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frames, "-vf", "palettegen=max_colors=256:stats_mode=diff", pal]);
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frames, "-i", pal, "-lavfi", "paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle", GIF]);
   console.log("gif →", GIF, (fs.statSync(GIF).size / 1e6).toFixed(1) + "MB");
+}
+
+async function shots(names = ["upload", "review", "chat"]) {
+  const dir = path.join(MANUAL, "screens");
+  fs.mkdirSync(dir, { recursive: true });
+  const { browser, page } = await openPage(944);
+  for (const n of names) {
+    await page.evaluate((x) => window.shot(x), n);
+    await page.screenshot({ path: path.join(dir, `${n}.png`) });
+  }
+  await browser.close();
+  console.log(`shots: ${names.join(", ")} → ${dir}`);
 }
 
 (async () => {
@@ -99,6 +126,7 @@ function gif() {
   if (mode === "stills") await stills(rest.length ? rest.map(Number) : BEATS);
   else if (mode === "audio") await audio();
   else if (mode === "video") await video();
-  else if (mode === "gif") gif();
-  else console.log("usage: render.cjs stills|audio|video|gif");
+  else if (mode === "gif") await gif();
+  else if (mode === "shots") await shots(rest.length ? rest : undefined);
+  else console.log("usage: render.cjs stills|audio|video|gif|shots");
 })().catch((e) => { console.error(e); process.exit(1); });
