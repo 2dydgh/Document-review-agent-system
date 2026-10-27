@@ -2,11 +2,11 @@
 
 | 파일 | 무엇 |
 |---|---|
-| `DocSuree-소개영상.gif` | README 맨 위의 소개 영상 (40초 · 800px · 15fps · 소리 없음) |
+| `DocSuree-소개영상.webp` | README "한눈에 보기"의 소개 영상 (40초 · 1600px · 15fps · 소리 없음). GIF 는 256색 한계로 글씨가 거칠어져 움직이는 WebP 를 쓴다 |
 | `film/index.html` | 영상 원본. 브라우저로 열면 아래 막대로 재생 · 탐색할 수 있다. 주소 뒤 `?t=12` 는 그 시점 정지 화면 |
 | `film/sound.js` | 사운드트랙(120 BPM). 브라우저 안에서 합성한다 |
-| `film/render.cjs` | MP4 · GIF · 정지 화면 렌더러 |
-| `screens/*.png` | README 본문의 화면 그림(업로드 · 검토 결과 · DoSuree 대화). 영상과 같은 화면을 카메라 · 돋보기 없이 원래 크기로 찍은 것 |
+| `film/render.cjs` | MP4 · WebP · 정지 화면 렌더러 |
+| `screens/*.png` | README "시스템 구동 화면"의 그림(홈 · 업로드 · 검토 결과 · DoSuree 대화). 영상과 같은 화면을 카메라 · 돋보기 없이 원래 크기로 찍은 것 |
 
 영상은 캡처가 아니다. 실제 화면(`web/public/screenshots/`)의 구성을 벡터로 다시 그렸고,
 글꼴 · 마스코트 · 로고는 `web/public/` 의 것을 그대로 쓴다. 하나의 돋보기가 처음부터 끝까지 이어진다 —
@@ -18,7 +18,7 @@
 ```bash
 PLAYWRIGHT=<node_modules/playwright 경로> \
   node docs/manual/film/render.cjs video    # → docs/manual/build/DocSuree-소개영상.mp4 (git 제외)
-PLAYWRIGHT=… node docs/manual/film/render.cjs gif   # → docs/manual/DocSuree-소개영상.gif (페이지에서 바로 15fps 로 찍는다)
+PLAYWRIGHT=… node docs/manual/film/render.cjs webp  # → docs/manual/DocSuree-소개영상.webp (페이지에서 바로 15fps 로 찍는다)
 node docs/manual/film/render.cjs shots      # → docs/manual/screens/*.png
 node docs/manual/film/render.cjs stills     # → 박자(0.5초)마다 한 장, 확인용
 ```

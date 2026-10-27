@@ -2,8 +2,8 @@
 //   node docs/manual/film/render.cjs stills [t1 t2 ...]   → docs/manual/build/stills/*.png (박자별 확인용)
 //   node docs/manual/film/render.cjs audio                → docs/manual/build/soundtrack.wav
 //   node docs/manual/film/render.cjs video                → docs/manual/build/DocSuree-소개영상.mp4 (60fps, 서브프레임 6장 모션 블러 + 소리)
-//   node docs/manual/film/render.cjs gif                  → docs/manual/DocSuree-소개영상.gif (README용, 800px · 15fps · 소리 없음)
-//   node docs/manual/film/render.cjs shots                → docs/manual/screens/{upload,review,chat}.png (README 정지 화면, home 도 찍을 수 있다)
+//   node docs/manual/film/render.cjs webp                 → docs/manual/DocSuree-소개영상.webp (README용, 1600px · 15fps · 소리 없음)
+//   node docs/manual/film/render.cjs shots                → docs/manual/screens/{home,upload,review,chat}.png (README 정지 화면)
 // build/ 는 git 에서 빠진다. 이 저장소는 node_modules 를 두지 않으므로 Playwright 위치를 환경변수로 넘긴다.
 //   PLAYWRIGHT=/path/to/node_modules/playwright node docs/manual/film/render.cjs video
 const path = require("path");
@@ -14,7 +14,7 @@ const ROOT = __dirname;
 const MANUAL = path.resolve(ROOT, "..");
 const BUILD = path.join(MANUAL, "build");
 const MP4 = path.join(BUILD, "DocSuree-소개영상.mp4");
-const GIF = path.join(MANUAL, "DocSuree-소개영상.gif");
+const WEBP = path.join(MANUAL, "DocSuree-소개영상.webp");
 const FPS = 60, SUB = 6;
 const BEATS = Array.from({ length: 80 }, (_, i) => i * 0.5 + 0.25);   // 120 BPM, 박마다 가운데 한 장
 
@@ -87,15 +87,16 @@ async function video() {
   console.log("video →", MP4);
 }
 
-// GIF 는 MP4 에서 뽑지 않고 페이지에서 바로 찍는다. MP4 의 모션 블러(서브프레임 평균)는 60fps 에서는
-// 자연스럽지만, 15fps 로 솎으면 빠르게 움직이는 돋보기가 여러 겹 잔상으로 남아 깨져 보인다.
-async function gif(fps = 15, width = 800) {
+// README 용 움직이는 WebP. GIF 는 장면마다 256색이 한계라 글씨 · 그라데이션이 거칠어져서 WebP 를 쓴다
+// (색 제한 없음 · 같은 용량에 해상도 두 배). MP4 에서 뽑지 않고 페이지에서 바로 찍는다 — MP4 의 모션 블러는
+// 60fps 에서는 자연스럽지만 15fps 로 솎으면 빠르게 움직이는 돋보기가 여러 겹 잔상으로 남는다.
+async function webp(fps = 15, width = 1600) {
   fs.mkdirSync(BUILD, { recursive: true });
   const { browser, page } = await openPage();
   const duration = await page.evaluate(() => window.DURATION);
-  const frames = path.join(BUILD, "gif-frames.mkv"), pal = path.join(BUILD, "palette.png");
   const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "png", "-i", "-",
-    "-vf", `scale=${width}:-1:flags=lanczos`, "-c:v", "ffv1", frames], { stdio: ["pipe", "inherit", "inherit"] });
+    "-vf", `scale=${width}:-1:flags=lanczos`, "-c:v", "libwebp_anim", "-lossless", "0", "-quality", "80", "-compression_level", "6", "-loop", "0", WEBP],
+    { stdio: ["pipe", "inherit", "inherit"] });
   for (let f = 0; f < Math.round(duration * fps); f++) {
     await page.evaluate((x) => window.seek(x), f / fps);
     const buf = await page.screenshot({ type: "png" });
@@ -104,12 +105,10 @@ async function gif(fps = 15, width = 800) {
   ff.stdin.end();
   await new Promise((r, j) => ff.on("close", (c) => (c === 0 ? r() : j(new Error("ffmpeg exit " + c)))));
   await browser.close();
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frames, "-vf", "palettegen=max_colors=256:stats_mode=diff", pal]);
-  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frames, "-i", pal, "-lavfi", "paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle", GIF]);
-  console.log("gif →", GIF, (fs.statSync(GIF).size / 1e6).toFixed(1) + "MB");
+  console.log("webp →", WEBP, (fs.statSync(WEBP).size / 1e6).toFixed(1) + "MB");
 }
 
-async function shots(names = ["upload", "review", "chat"]) {
+async function shots(names = ["home", "upload", "review", "chat"]) {
   const dir = path.join(MANUAL, "screens");
   fs.mkdirSync(dir, { recursive: true });
   const { browser, page } = await openPage(944);
@@ -126,7 +125,7 @@ async function shots(names = ["upload", "review", "chat"]) {
   if (mode === "stills") await stills(rest.length ? rest.map(Number) : BEATS);
   else if (mode === "audio") await audio();
   else if (mode === "video") await video();
-  else if (mode === "gif") await gif();
+  else if (mode === "webp") await webp();
   else if (mode === "shots") await shots(rest.length ? rest : undefined);
-  else console.log("usage: render.cjs stills|audio|video|gif|shots");
+  else console.log("usage: render.cjs stills|audio|video|webp|shots");
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -1,9 +1,5 @@
 <div align="center">
 
-<img src="docs/manual/DocSuree-소개영상.gif" width="100%" alt="DocSuree 소개 영상 — 문서 업로드, 규칙과 사내 LLM 검토, 지적마다 원문 인용 대조, 근거 없는 지적 제외, DoSuree 대화" />
-
-<sub>화면 속 문서 · 이름은 가상의 샘플입니다 · <a href="docs/manual/film/">영상 원본</a></sub>
-
 # DocSuree
 
 ### 근거를 원문에서 대조해 통과한 것만 지적하는 문서 검토 Agent
@@ -17,6 +13,43 @@
 <img src="https://img.shields.io/badge/Release-1차_배포_준비-F2A65A?style=flat-square" alt="1차 배포 준비" />
 
 </div>
+
+---
+
+## 한눈에 보기
+
+<div align="center">
+  <img src="docs/manual/DocSuree-소개영상.webp" alt="DocSuree 소개 영상 — 문서 업로드, 규칙과 사내 LLM 검토, 지적마다 원문 인용 대조, 근거 없는 지적 제외, DoSuree 대화" width="100%" />
+  <br/>
+  <sub><b>근거가 없으면, 지적하지 않습니다</b><br/>문서 업로드 → 규칙 · 사내 LLM 검토 → 지적마다 원문 인용 대조 → 근거 없는 지적 제외 → DoSuree 대화</sub>
+  <br/>
+  <sub>※ 화면 속 문서 · 이름은 가상의 샘플입니다 · <a href="docs/manual/film/">영상 원본</a></sub>
+</div>
+
+## 시스템 구동 화면
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/manual/screens/home.png" alt="홈" width="100%" /><br/>
+      <sub><b>홈</b> — 검토 시작 · 최근 검토 · 검토 기준 · DoSuree 대화를 한 화면에</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/manual/screens/upload.png" alt="단일 문서 검토" width="100%" /><br/>
+      <sub><b>단일 문서 검토</b> — 문서 한 개를 올리면 공통 + 팀 기준으로 검토</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/manual/screens/review.png" alt="검토 결과" width="100%" /><br/>
+      <sub><b>검토 결과</b> — 원문 형광펜 옆에 지적 목록, 지적마다 원문 인용과 근거 확인</sub>
+    </td>
+    <td align="center">
+      <img src="docs/manual/screens/chat.png" alt="DoSuree 대화" width="100%" /><br/>
+      <sub><b>DoSuree 대화</b> — 검토 결과와 문서 본문을 읽고 원문 인용을 붙여 답함</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -60,9 +93,7 @@ PDF·Word·HWP 산출물을 올리면 팀의 검토 기준에 따라 **형식·�
   </tr>
 </table>
 
-## 실제 검토 화면
-
-<img src="docs/manual/screens/review.png" width="100%" alt="DocSuree 검토 결과 — 원문 형광펜, 지적별 원문 인용과 근거 확인, 근거 없음 1건" />
+## 검토 결과 화면
 
 원문 형광펜과 지적 목록을 나란히 봅니다. 검토자는 지적마다 반영·해당없음을 판정하고,
 회신본을 올리면 이전 검토와 대조해 **반영 확인**(이전 지적별 상태 · 신규 지적)을 받습니다.
@@ -158,8 +189,6 @@ CSV로 내보낼 수도 있습니다.
 
 ## DoSuree 어시스턴트
 
-<img src="docs/manual/screens/chat.png" width="100%" alt="DoSuree 대화 — 질문에 원문 인용을 붙여 답한다" />
-
 검토 결과 화면 옆 패널(우하단 마스코트)에서 **DoSuree** 와 대화합니다.
 "이 지적은 왜 나왔지?", "문서에 보안 요구사항이 어디 있지?" 처럼 결과와 원문을 두고 묻습니다.
 
@@ -172,8 +201,6 @@ CSV로 내보낼 수도 있습니다.
   연결 토큰은 `uv run docsuree accounts token <email>` 로 발급합니다.
 
 ## 검토 흐름
-
-<img src="docs/manual/screens/upload.png" width="100%" alt="DocSuree 단일 문서 검토 — PDF 첨부" />
 
 ```text
 문서 업로드 (PDF · DOCX · HWP · HWPX · MD · TXT)
